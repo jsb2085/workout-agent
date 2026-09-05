@@ -5,7 +5,7 @@ from app.api.deps import CurrentUser, SessionDep
 from app.models.user import User
 from app.schemas.auth import GoogleLoginRequest, TokenResponse
 from app.schemas.user import UserRead
-from app.services.google_auth import verify_google_id_token
+from app.services import google_auth
 from app.services.tokens import create_access_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/google", response_model=TokenResponse)
 async def google_login(body: GoogleLoginRequest, session: SessionDep) -> TokenResponse:
     try:
-        info = verify_google_id_token(body.id_token)
+        info = google_auth.verify_google_id_token(body.id_token)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
 

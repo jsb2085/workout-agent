@@ -4,9 +4,21 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app import db as db_module
 from app.api.routers import api_router
 from app.config import get_settings
+from app.db import Base
 from app.mcp.server import create_mcp_http_app
+from app.models import (  # noqa: F401
+    Cardio,
+    GymLocation,
+    LiftingWorkout,
+    PerformanceGoal,
+    PhysicPhoto,
+    Protein,
+    Steps,
+    User,
+)
 from app.services import storage
 
 mcp_app = create_mcp_http_app()
@@ -14,6 +26,9 @@ mcp_app = create_mcp_http_app()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if get_settings().database_url.startswith("sqlite"):
+        async with db_module.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
     try:
         storage.ensure_bucket()
     except Exception:

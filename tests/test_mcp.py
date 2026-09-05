@@ -1,5 +1,3 @@
-from fastmcp import Client
-
 from app.mcp.permissions import READ_ONLY_RESOURCES, WRITABLE_RESOURCES
 from app.mcp.server import mcp
 
@@ -15,8 +13,8 @@ async def test_mcp_accepts_agent_token(client, mcp_header):
 
 
 async def test_mcp_write_tools_only_for_allowed_resources():
-    tools = await mcp.get_tools()
-    names = set(tools)
+    tools = await mcp.list_tools()
+    names = {tool.name for tool in tools}
 
     for resource in WRITABLE_RESOURCES:
         prefix = resource.removesuffix("s") if resource.endswith("s") and resource != "steps" else resource
@@ -45,27 +43,35 @@ async def test_mcp_write_tools_only_for_allowed_resources():
     assert "list_physic_photos" in names
 
 
-async def test_mcp_can_write_protein_for_user(client, alice_token):
-    async with Client(mcp) as mcp_client:
-        created = await mcp_client.call_tool(
-            "create_protein",
-            {
-                "email": "alice@example.com",
-                "grams_goal": 150,
-                "grams_actual": 90,
-                "date_todo": "2026-09-05T18:00:00+00:00",
-            },
-        )
-        payload = created.data if hasattr(created, "data") else created
-        if isinstance(payload, list):
-            payload = payload[0]
-        assert payload["grams_goal"] == 150
-        item_id = payload["id"]
+def _tool_payload(result):
+    payload = result.structured_content
+    if payload is None and result.content:
+        payload = result.content
+    if isinstance(payload, dict) and "result" in payload and len(payload) == 1:
+        payload = payload["result"]
+    return payload
 
-        listed = await mcp_client.call_tool("list_protein", {"email": "alice@example.com"})
-        listed_data = listed.data if hasattr(listed, "data") else listed
-        if isinstance(listed_data, dict) and "id" in listed_data:
-            listed_rows = [listed_data]
-        else:
-            listed_rows = listed_data
-        assert any(row["id"] == item_id for row in listed_rows)
+
+async def test_mcp_can_write_protein_for_user(client, alice_token):
+    created = await mcp.call_tool(
+        "create_protein",
+        {
+            "email": "alice@example.com",
+            "grams_goal": 150,
+            "grams_actual": 90,
+            "date_todo": "2026-09-05T18:00:00+00:00",
+        },
+    )
+    payload = _tool_payload(created)
+    if isinstance(payload, list):
+        payload = payload[0]
+    assert payload["grams_goal"] == 150
+    item_id = payload["id"]
+
+    listed = await mcp.call_tool("list_protein", {"email": "alice@example.com"})
+    listed_data = _tool_payload(listed)
+    if isinstance(listed_data, dict) and "id" in listed_data:
+        listed_rows = [listed_data]
+    else:
+        listed_rows = listed_data
+    assert any(row["id"] == item_id for row in listed_rows)

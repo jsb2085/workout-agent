@@ -45,7 +45,7 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://workout:workout@db:5432/workout
-      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-me}
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-me-please-use-32+}
       JWT_ALGORITHM: HS256
       JWT_EXPIRE_MINUTES: "43200"
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-dev-google-client-id}

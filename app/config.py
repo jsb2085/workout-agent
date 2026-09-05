@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = "postgresql+asyncpg://workout:workout@localhost:5432/workout"
-    jwt_secret: str = "dev-jwt-secret-change-me"
+    jwt_secret: str = "dev-jwt-secret-change-me-please-use-32+"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24 * 30
     google_client_id: str = "dev-google-client-id"

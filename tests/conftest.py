@@ -53,6 +53,7 @@ async def client(tmp_path, monkeypatch) -> AsyncIterator[AsyncClient]:
         yield ac
 
     app.dependency_overrides.clear()
+    await db_module.engine.dispose()
 
 
 async def login(client: AsyncClient, token: str) -> str:

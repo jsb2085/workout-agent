@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastmcp import FastMCP
 
-from app.db import SessionLocal
+from app import db as db_module
 from app.models.cardio import Cardio
 from app.models.gym_location import GymLocation
 from app.models.lifting_workout import LiftingWorkout
@@ -25,12 +25,12 @@ def register_tools(mcp: FastMCP) -> None:
     @mcp.tool
     async def resolve_user(email: str | None = None, user_id: str | None = None) -> dict[str, Any]:
         """Look up a workout-app user by email or user_id. Provide one or both."""
-        async with SessionLocal() as session:
+        async with db_module.SessionLocal() as session:
             user = await records.resolve_user(session, email=email, user_id=user_id)
             return {"id": str(user.id), "email": user.email, "name": user.name}
 
     async def _list(model, date_field, email, user_id, date_from, date_to):
-        async with SessionLocal() as session:
+        async with db_module.SessionLocal() as session:
             user = await records.resolve_user(session, email=email, user_id=user_id)
             items = await records.list_for_user(
                 session,
@@ -43,7 +43,7 @@ def register_tools(mcp: FastMCP) -> None:
             return [records.to_dict(item) for item in items]
 
     async def _get(model, item_id, email, user_id):
-        async with SessionLocal() as session:
+        async with db_module.SessionLocal() as session:
             user = await records.resolve_user(session, email=email, user_id=user_id)
             item = await records.get_for_user(session, model, user.id, UUID(item_id))
             if item is None:
@@ -51,13 +51,13 @@ def register_tools(mcp: FastMCP) -> None:
             return records.to_dict(item)
 
     async def _create(model, data, email, user_id):
-        async with SessionLocal() as session:
+        async with db_module.SessionLocal() as session:
             user = await records.resolve_user(session, email=email, user_id=user_id)
             item = await records.create_for_user(session, model, user.id, data)
             return records.to_dict(item)
 
     async def _update(model, item_id, data, email, user_id):
-        async with SessionLocal() as session:
+        async with db_module.SessionLocal() as session:
             user = await records.resolve_user(session, email=email, user_id=user_id)
             item = await records.update_for_user(session, model, user.id, UUID(item_id), data)
             if item is None:
@@ -65,7 +65,7 @@ def register_tools(mcp: FastMCP) -> None:
             return records.to_dict(item)
 
     async def _delete(model, item_id, email, user_id) -> str:
-        async with SessionLocal() as session:
+        async with db_module.SessionLocal() as session:
             user = await records.resolve_user(session, email=email, user_id=user_id)
             deleted = await records.delete_for_user(session, model, user.id, UUID(item_id))
             if not deleted:
