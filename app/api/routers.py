@@ -3,12 +3,14 @@ from fastapi import APIRouter
 from app.api.auth import router as auth_router
 from app.api.crud import crud_router
 from app.api.physic_photos import router as physic_photos_router
+from app.models.body_stats import BodyStats
 from app.models.cardio import Cardio
 from app.models.gym_location import GymLocation
 from app.models.lifting_workout import LiftingWorkout
 from app.models.performance_goal import PerformanceGoal
 from app.models.protein import Protein
 from app.models.steps import Steps
+from app.schemas.body_stats import BodyStatsCreate, BodyStatsRead, BodyStatsUpdate
 from app.schemas.cardio import CardioCreate, CardioRead, CardioUpdate
 from app.schemas.gym_location import GymLocationCreate, GymLocationRead, GymLocationUpdate
 from app.schemas.lifting_workout import LiftingWorkoutCreate, LiftingWorkoutRead, LiftingWorkoutUpdate
@@ -85,5 +87,16 @@ api_router.include_router(
         prefix="/steps",
         tags=["steps"],
         date_field="date_todo",
+    )
+)
+api_router.include_router(
+    crud_router(
+        BodyStats,
+        BodyStatsCreate,
+        BodyStatsUpdate,
+        BodyStatsRead,
+        prefix="/body-stats",
+        tags=["body-stats"],
+        date_field="date",
     )
 )

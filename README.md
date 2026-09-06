@@ -62,8 +62,11 @@ All rows are UUID-keyed and scoped to the JWT user.
 | Physique photos | `/physic-photos` | `date_from`, `date_to` |
 | Protein | `/protein` | `date_from`, `date_to` |
 | Steps | `/steps` | `date_from`, `date_to` |
+| Body stats | `/body-stats` | `date_from`, `date_to` |
 
 Each resource supports `GET /`, `GET /{id}`, `POST /`, `PATCH /{id}`, `DELETE /{id}`.
+
+Body stats store `height`, `weight`, and current main lifts (`squat`, `bench`, `deadlift`, `overhead_press`). Lift fields are optional: omit them or send `null` for **I don't know**.
 
 Photos are uploaded as multipart (`picture` file plus `is_goal`, `is_current`, `date`). Bytes go to the MinIO `physique-photos` bucket; Postgres stores `object_key`. `GET /physic-photos/{id}/url` returns a short-lived presigned GET URL.
 
@@ -79,11 +82,11 @@ Authorization: Bearer <MCP_AGENT_TOKEN>
 
 Every tool takes `email` and/or `user_id` so one agent can act for either of you.
 
-**Read tools:** `resolve_user`, plus `list_*` / `get_*` for lifting workouts, cardio, gym locations, performance goals, physique photos, protein, and steps.
+**Read tools:** `resolve_user`, plus `list_*` / `get_*` for lifting workouts, cardio, gym locations, performance goals, physique photos, protein, steps, and body stats.
 
 **Write tools (create / update / delete only):** lifting workouts, cardio, protein, steps.
 
-The agent cannot create, update, or delete gym locations, performance goals, or photos.
+The agent cannot create, update, or delete gym locations, performance goals, photos, or body stats.
 
 ## Local tests
 

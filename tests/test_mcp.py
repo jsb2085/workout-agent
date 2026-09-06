@@ -35,12 +35,19 @@ async def test_mcp_write_tools_only_for_allowed_resources():
         "create_physic_photo",
         "update_physic_photo",
         "delete_physic_photo",
+        "create_body_stats",
+        "update_body_stats",
+        "delete_body_stats",
     }
     assert forbidden.isdisjoint(names)
-    assert READ_ONLY_RESOURCES == frozenset({"gym_location", "performance_goals", "physic_photos"})
+    assert READ_ONLY_RESOURCES == frozenset(
+        {"gym_location", "performance_goals", "physic_photos", "body_stats"}
+    )
     assert "list_gym_locations" in names
     assert "list_performance_goals" in names
     assert "list_physic_photos" in names
+    assert "list_body_stats" in names
+    assert "get_body_stats" in names
 
 
 def _tool_payload(result):

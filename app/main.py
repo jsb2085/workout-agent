@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.db import Base
 from app.mcp.server import create_mcp_http_app
 from app.models import (  # noqa: F401
+    BodyStats,
     Cardio,
     GymLocation,
     LiftingWorkout,

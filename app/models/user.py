@@ -27,3 +27,4 @@ class User(Base):
     physic_photos = relationship("PhysicPhoto", back_populates="user", cascade="all, delete-orphan")
     proteins = relationship("Protein", back_populates="user", cascade="all, delete-orphan")
     steps = relationship("Steps", back_populates="user", cascade="all, delete-orphan")
+    body_stats = relationship("BodyStats", back_populates="user", cascade="all, delete-orphan")

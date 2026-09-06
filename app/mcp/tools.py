@@ -7,6 +7,7 @@ from uuid import UUID
 from fastmcp import FastMCP
 
 from app import db as db_module
+from app.models.body_stats import BodyStats
 from app.models.cardio import Cardio
 from app.models.gym_location import GymLocation
 from app.models.lifting_workout import LiftingWorkout
@@ -427,3 +428,22 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         """Get one physique photo record by id (read-only for the agent)."""
         return await _get(PhysicPhoto, item_id, email, user_id)
+
+    @mcp.tool
+    async def list_body_stats(
+        email: str | None = None,
+        user_id: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """List height, weight, and main-lift stats for a user (read-only for the agent). Null lifts mean I don't know."""
+        return await _list(BodyStats, "date", email, user_id, date_from, date_to)
+
+    @mcp.tool
+    async def get_body_stats(
+        item_id: str,
+        email: str | None = None,
+        user_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Get one body-stats snapshot by id (read-only for the agent)."""
+        return await _get(BodyStats, item_id, email, user_id)
