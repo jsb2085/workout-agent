@@ -48,7 +48,6 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-me-please-use-32+}
       JWT_ALGORITHM: HS256
       JWT_EXPIRE_MINUTES: "43200"
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-dev-google-client-id}
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin

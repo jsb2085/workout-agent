@@ -3,15 +3,15 @@ from collections.abc import AsyncIterator
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app import db as db_module
 from app.config import get_settings
 from app.db import Base, configure_engine, get_session
-from app import db as db_module
 from app.main import app
-from app.services import google_auth, storage
+from app.services import storage
 
-GOOGLE_USERS = {
-    "alice-token": {"sub": "google-alice", "email": "alice@example.com", "name": "Alice"},
-    "bob-token": {"sub": "google-bob", "email": "bob@example.com", "name": "Bob"},
+USERS = {
+    "alice": {"email": "alice@example.com", "password": "password1", "name": "Alice"},
+    "bob": {"email": "bob@example.com", "password": "password2", "name": "Bob"},
 }
 
 
@@ -33,12 +33,6 @@ async def client(tmp_path, monkeypatch) -> AsyncIterator[AsyncClient]:
 
     app.dependency_overrides[get_session] = override_session
 
-    def fake_verify(token: str):
-        if token not in GOOGLE_USERS:
-            raise ValueError("Invalid Google token")
-        return GOOGLE_USERS[token]
-
-    monkeypatch.setattr(google_auth, "verify_google_id_token", fake_verify)
     monkeypatch.setattr(storage, "ensure_bucket", lambda: None)
     monkeypatch.setattr(storage, "upload_image", lambda *args, **kwargs: None)
     monkeypatch.setattr(storage, "delete_image", lambda *args, **kwargs: None)
@@ -56,9 +50,10 @@ async def client(tmp_path, monkeypatch) -> AsyncIterator[AsyncClient]:
     await db_module.engine.dispose()
 
 
-async def login(client: AsyncClient, token: str) -> str:
-    response = await client.post("/auth/google", json={"id_token": token})
-    assert response.status_code == 200, response.text
+async def register_user(client: AsyncClient, key: str) -> str:
+    payload = USERS[key]
+    response = await client.post("/auth/register", json=payload)
+    assert response.status_code == 201, response.text
     return response.json()["access_token"]
 
 
@@ -68,12 +63,12 @@ def auth_header(access_token: str) -> dict[str, str]:
 
 @pytest.fixture
 async def alice_token(client: AsyncClient) -> str:
-    return await login(client, "alice-token")
+    return await register_user(client, "alice")
 
 
 @pytest.fixture
 async def bob_token(client: AsyncClient) -> str:
-    return await login(client, "bob-token")
+    return await register_user(client, "bob")
 
 
 @pytest.fixture

@@ -1,20 +1,20 @@
 # Workout Agent
 
-FastAPI backend for a SwiftUI workout app. Each person (you and your wife) signs in with Google and only sees their own data. A LangChain deep agent can later connect over MCP to read everything and write protein, steps, lifting workouts, and cardio.
+FastAPI backend for a SwiftUI workout app. Each person (you and your wife) creates an email/password account and only sees their own data. A LangChain deep agent can later connect over MCP to read everything and write protein, steps, lifting workouts, and cardio.
 
 ## Stack
 
 - FastAPI + SQLAlchemy 2 (async) + Alembic
 - Postgres 16
 - MinIO (S3-compatible) for physique photos
-- Google Sign-In ID tokens → JWT
+- Email/password login → JWT
 - FastMCP mounted at `/mcp`
 
 ## Quick start
 
 ```bash
 cp .env.example .env
-# set JWT_SECRET, GOOGLE_CLIENT_ID, and MCP_AGENT_TOKEN
+# set JWT_SECRET and MCP_AGENT_TOKEN
 docker compose up --build
 ```
 
@@ -25,18 +25,19 @@ docker compose up --build
 
 Alembic runs `upgrade head` when the API container starts.
 
-## Google Sign-In
+## Login
 
-1. In Google Cloud Console, create an OAuth client ID for **iOS** (SwiftUI) and, if you test from a browser, a **Web** client.
-2. Put the iOS/Web client ID in `GOOGLE_CLIENT_ID`. The API verifies ID tokens against this audience.
-3. SwiftUI signs in with the Google Sign-In SDK, then:
+Create an account, then sign in with the same email and password. Passwords must be at least 8 characters.
 
 ```http
-POST /auth/google
-{"id_token": "<google-id-token>"}
+POST /auth/register
+{"email": "you@example.com", "password": "at-least-8", "name": "Jordan"}
+
+POST /auth/login
+{"email": "you@example.com", "password": "at-least-8"}
 ```
 
-Response:
+Both return:
 
 ```json
 {
@@ -46,9 +47,7 @@ Response:
 }
 ```
 
-Send `Authorization: Bearer <jwt>` on every CRUD request. `GET /auth/me` returns the current user.
-
-No password accounts in this version.
+Send `Authorization: Bearer <jwt>` on every CRUD request. `GET /auth/me` returns the current user. Emails are unique and stored lowercase.
 
 ## REST resources
 
@@ -95,7 +94,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-Tests use SQLite and mock Google + MinIO.
+Tests use SQLite and mock MinIO.
 
 ## Environment
 

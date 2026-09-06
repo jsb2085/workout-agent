@@ -1,4 +1,4 @@
-from app.schemas.auth import GoogleLoginRequest, TokenResponse
+from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
 from app.schemas.cardio import CardioCreate, CardioRead, CardioUpdate
 from app.schemas.gym_location import GymLocationCreate, GymLocationRead, GymLocationUpdate
 from app.schemas.lifting_workout import LiftingWorkoutCreate, LiftingWorkoutRead, LiftingWorkoutUpdate
@@ -12,7 +12,8 @@ __all__ = [
     "CardioCreate",
     "CardioRead",
     "CardioUpdate",
-    "GoogleLoginRequest",
+    "LoginRequest",
+    "RegisterRequest",
     "GymLocationCreate",
     "GymLocationRead",
     "GymLocationUpdate",
