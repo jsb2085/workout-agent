@@ -35,3 +35,30 @@ async def test_bob_cannot_see_alice_photo(client, alice_token, bob_token):
 
     bob_get = await client.get(f"/physic-photos/{photo_id}", headers=auth_header(bob_token))
     assert bob_get.status_code == 404
+
+
+async def test_physique_comparison_returns_latest_and_goal(client, alice_token):
+    headers = auth_header(alice_token)
+    goal = await client.post(
+        "/physic-photos/",
+        headers=headers,
+        files={"picture": ("goal.jpg", b"goal-bytes", "image/jpeg")},
+        data={"is_goal": "true", "is_current": "false", "date": "2026-01-01T09:00:00+00:00"},
+    )
+    current = await client.post(
+        "/physic-photos/",
+        headers=headers,
+        files={"picture": ("now.jpg", b"now-bytes", "image/jpeg")},
+        data={"is_goal": "false", "is_current": "true", "date": "2026-09-05T09:00:00+00:00"},
+    )
+    assert goal.status_code == 201
+    assert current.status_code == 201
+
+    comparison = await client.get("/physic-photos/comparison", headers=headers)
+    assert comparison.status_code == 200, comparison.text
+    body = comparison.json()
+    assert body["missing"] == []
+    assert body["goal"]["id"] == goal.json()["id"]
+    assert body["latest"]["id"] == current.json()["id"]
+    assert body["latest"]["url"].startswith("https://minio.test/")
+    assert body["goal"]["url"].startswith("https://minio.test/")

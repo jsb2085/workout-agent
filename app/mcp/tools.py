@@ -15,7 +15,7 @@ from app.models.performance_goal import PerformanceGoal
 from app.models.physic_photo import PhysicPhoto
 from app.models.protein import Protein
 from app.models.steps import Steps
-from app.services import records
+from app.services import photos, records
 
 
 def _parse_dt(value: str) -> datetime:
@@ -428,6 +428,35 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         """Get one physique photo record by id (read-only for the agent)."""
         return await _get(PhysicPhoto, item_id, email, user_id)
+
+    @mcp.tool
+    async def get_physic_photo_url(
+        item_id: str,
+        email: str | None = None,
+        user_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Presigned download URL for one physique photo. Read-only."""
+        async with db_module.SessionLocal() as session:
+            user = await records.resolve_user(session, email=email, user_id=user_id)
+            item = await records.get_for_user(session, PhysicPhoto, user.id, UUID(item_id))
+            if item is None:
+                raise ValueError("Not found")
+            return photos.photo_with_url(item)
+
+    @mcp.tool
+    async def get_physique_comparison_photos(
+        email: str | None = None,
+        user_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Latest progress photo and goal photo with download URLs for the vision node.
+
+        latest is is_current, else the most recent non-goal photo.
+        goal is the most recent is_goal photo.
+        missing lists whichever side is absent.
+        """
+        async with db_module.SessionLocal() as session:
+            user = await records.resolve_user(session, email=email, user_id=user_id)
+            return await photos.physique_comparison(session, user.id)
 
     @mcp.tool
     async def list_body_stats(

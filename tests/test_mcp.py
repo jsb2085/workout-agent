@@ -46,6 +46,8 @@ async def test_mcp_write_tools_only_for_allowed_resources():
     assert "list_gym_locations" in names
     assert "list_performance_goals" in names
     assert "list_physic_photos" in names
+    assert "get_physique_comparison_photos" in names
+    assert "get_physic_photo_url" in names
     assert "list_body_stats" in names
     assert "get_body_stats" in names
 

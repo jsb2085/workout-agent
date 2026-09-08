@@ -131,3 +131,29 @@ async def test_user_cannot_read_another_users_body_stats(client, alice_token, bo
 
     bob_get = await client.get(f"/body-stats/{item_id}", headers=auth_header(bob_token))
     assert bob_get.status_code == 404
+
+
+async def test_body_stats_can_set_a_lift_to_unknown(client, alice_token):
+    headers = auth_header(alice_token)
+    created = await client.post(
+        "/body-stats/",
+        headers=headers,
+        json={
+            "height": "5'8\"",
+            "weight": "155",
+            "squat": "185",
+            "bench": "115",
+            "date": "2026-09-06T08:00:00+00:00",
+        },
+    )
+    assert created.status_code == 201
+    item_id = created.json()["id"]
+
+    patched = await client.patch(
+        f"/body-stats/{item_id}",
+        headers=headers,
+        json={"bench": None},
+    )
+    assert patched.status_code == 200
+    assert patched.json()["squat"] == "185"
+    assert patched.json()["bench"] is None

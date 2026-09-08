@@ -5,8 +5,13 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from app.api.deps import CurrentUser, SessionDep
 from app.models.physic_photo import PhysicPhoto
-from app.schemas.physic_photo import PhysicPhotoRead, PhysicPhotoUpdate, PhysicPhotoUrl
-from app.services import records, storage
+from app.schemas.physic_photo import (
+    PhysicPhotoRead,
+    PhysicPhotoUpdate,
+    PhysicPhotoUrl,
+    PhysiqueComparison,
+)
+from app.services import photos, records, storage
 
 router = APIRouter(prefix="/physic-photos", tags=["physic-photos"])
 
@@ -19,8 +24,10 @@ async def list_photos(
     user: CurrentUser,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
+    is_goal: bool | None = None,
+    is_current: bool | None = None,
 ):
-    return await records.list_for_user(
+    items = await records.list_for_user(
         session,
         PhysicPhoto,
         user.id,
@@ -28,6 +35,17 @@ async def list_photos(
         date_from=date_from,
         date_to=date_to,
     )
+    if is_goal is not None:
+        items = [item for item in items if item.is_goal is is_goal]
+    if is_current is not None:
+        items = [item for item in items if item.is_current is is_current]
+    return items
+
+
+@router.get("/comparison", response_model=PhysiqueComparison)
+async def compare_photos(session: SessionDep, user: CurrentUser):
+    """Latest progress photo vs goal photo, with presigned download URLs."""
+    return await photos.physique_comparison(session, user.id)
 
 
 @router.get("/{item_id}", response_model=PhysicPhotoRead)

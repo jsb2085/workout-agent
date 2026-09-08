@@ -24,3 +24,14 @@ class PhysicPhotoRead(BaseModel):
 class PhysicPhotoUrl(BaseModel):
     url: str
     expires_in_seconds: int
+
+
+class PhysicPhotoWithUrl(PhysicPhotoRead):
+    url: str
+    expires_in_seconds: int
+
+
+class PhysiqueComparison(BaseModel):
+    latest: PhysicPhotoWithUrl | None
+    goal: PhysicPhotoWithUrl | None
+    missing: list[str]

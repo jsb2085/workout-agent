@@ -68,7 +68,7 @@ Each resource supports `GET /`, `GET /{id}`, `POST /`, `PATCH /{id}`, `DELETE /{
 
 Body stats store `height`, `weight`, and current main lifts (`squat`, `bench`, `deadlift`, `overhead_press`). Lift fields are optional: omit them or send `null` for **I don't know**.
 
-Photos are uploaded as multipart (`picture` file plus `is_goal`, `is_current`, `date`). Bytes go to the MinIO `physique-photos` bucket; Postgres stores `object_key`. `GET /physic-photos/{id}/url` returns a short-lived presigned GET URL.
+Photos are uploaded as multipart (`picture` file plus `is_goal`, `is_current`, `date`). Bytes go to the MinIO `physique-photos` bucket; Postgres stores `object_key`. `GET /physic-photos/{id}/url` returns a short-lived presigned GET URL. `GET /physic-photos/comparison` returns the latest progress photo and the goal photo with URLs (for the weekly-plan vision node).
 
 ## MCP server
 
@@ -82,7 +82,7 @@ Authorization: Bearer <MCP_AGENT_TOKEN>
 
 Every tool takes `email` and/or `user_id` so one agent can act for either of you.
 
-**Read tools:** `resolve_user`, plus `list_*` / `get_*` for lifting workouts, cardio, gym locations, performance goals, physique photos, protein, steps, and body stats.
+**Read tools:** `resolve_user`, plus `list_*` / `get_*` for lifting workouts, cardio, gym locations, performance goals, physique photos, protein, steps, and body stats. Physique photos also expose `get_physic_photo_url` and `get_physique_comparison_photos` (latest vs goal, with download URLs).
 
 **Write tools (create / update / delete only):** lifting workouts, cardio, protein, steps.
 
