@@ -5,6 +5,7 @@ from typing import Any
 
 from fastmcp import FastMCP
 
+from app.graph.planner import run_week
 from app.schemas.weekly_plan import WeeklyPlan
 from app.services import exercisedb, weekly_plan as weekly_plan_service
 
@@ -33,6 +34,23 @@ def register_tools(mcp: FastMCP) -> None:
             plan,
             dry_run=dry_run,
             include_videos=include_videos,
+        )
+
+    @mcp.tool
+    async def run_weekly_planner(
+        week_start: str | None = None,
+        week_end: str | None = None,
+        include_videos: bool = True,
+        dry_run: bool = False,
+        push: bool = True,
+    ) -> dict[str, Any]:
+        """Pull Notion, run the LangGraph planner (gpt-5.6-luna), optionally push the week."""
+        return await run_week(
+            week_start=week_start,
+            week_end=week_end,
+            dry_run=dry_run,
+            include_videos=include_videos,
+            push=push,
         )
 
     @mcp.tool

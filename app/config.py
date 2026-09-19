@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     notion_template_id: str = ""
     notion_version: str = ""
     notion_timeout_seconds: float = 20.0
+    openai_api_key: str = ""
+    openai_model: str = "gpt-5.6-luna"
+    openai_reasoning_effort: str = "medium"
 
     @property
     def cors_origin_list(self) -> list[str]:
