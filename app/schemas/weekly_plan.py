@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date as Date
 
 from pydantic import BaseModel, Field
 
@@ -27,7 +27,7 @@ class PlannedCardio(BaseModel):
 
 
 class PlannedDay(BaseModel):
-    date: date
+    date: Date
     focus: str | None = None
     lifts: list[PlannedLift] = Field(default_factory=list)
     cardio: list[PlannedCardio] = Field(default_factory=list)
@@ -53,7 +53,7 @@ class PlannedLocation(BaseModel):
 
 
 class BodyStatsSnapshot(BaseModel):
-    date: date | None = None
+    date: Date | None = None
     height: str | None = None
     weight: str | None = None
     squat: str | None = None
@@ -63,8 +63,8 @@ class BodyStatsSnapshot(BaseModel):
 
 
 class WeeklyPlan(BaseModel):
-    week_start: date
-    week_end: date
+    week_start: Date
+    week_end: Date
     title: str
     focus: str | None = None
     notes: str | None = None
