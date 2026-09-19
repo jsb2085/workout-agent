@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     minio_secure: bool = False
     mcp_agent_token: str = "dev-mcp-agent-token"
     cors_origins: str = "*"
+    # ExerciseDB: RapidAPI key enables V2 MP4 videos. Without a key, the free
+    # hosted V1 API is used and demonstration media is an animated GIF.
+    exercisedb_api_key: str = ""
+    exercisedb_api_host: str = "edb-with-videos-and-images-by-ascendapi.p.rapidapi.com"
+    exercisedb_base_url: str = ""
+    exercisedb_timeout_seconds: float = 15.0
 
     @property
     def cors_origin_list(self) -> list[str]:

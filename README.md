@@ -9,6 +9,7 @@ FastAPI backend for a SwiftUI workout app. Each person (you and your wife) creat
 - MinIO (S3-compatible) for physique photos
 - Email/password login → JWT
 - FastMCP mounted at `/mcp`
+- ExerciseDB for workout demonstration videos (MP4 via RapidAPI V2, GIF via the free hosted API)
 
 ## Quick start
 
@@ -70,6 +71,30 @@ Body stats store `height`, `weight`, and current main lifts (`squat`, `bench`, `
 
 Photos are uploaded as multipart (`picture` file plus `is_goal`, `is_current`, `date`). Bytes go to the MinIO `physique-photos` bucket; Postgres stores `object_key`. `GET /physic-photos/{id}/url` returns a short-lived presigned GET URL. `GET /physic-photos/comparison` returns the latest progress photo and the goal photo with URLs (for the weekly-plan vision node).
 
+## Exercise videos (ExerciseDB)
+
+The agent and the SwiftUI app can look up demonstration media from [ExerciseDB](https://docs.ascendapi.com/products/edb-v2/overview).
+
+| Env | Purpose |
+|---|---|
+| `EXERCISEDB_API_KEY` | RapidAPI key. When set, requests go to ExerciseDB V2 and each exercise includes an MP4 `video_url`. |
+| `EXERCISEDB_API_HOST` | RapidAPI host (default: `edb-with-videos-and-images-by-ascendapi.p.rapidapi.com`) |
+| `EXERCISEDB_BASE_URL` | Optional full base URL override |
+| *(no key)* | Uses the free hosted API at `https://oss.exercisedb.dev`. `demo_url` is an animated GIF. |
+
+Subscribe on RapidAPI: [EDB with Videos and Images](https://rapidapi.com/ascendapi/api/edb-with-videos-and-images-by-ascendapi).
+
+Authenticated REST:
+
+| Method | Path | What it returns |
+|---|---|---|
+| `GET` | `/exercises?name=bench%20press` | Search results with `demo_url` / `video_url` / `gif_url` |
+| `GET` | `/exercises/{exercise_id}` | One exercise, including demonstration media |
+| `GET` | `/exercises/for-workouts` | Current user's lifting workouts with matched videos |
+| `GET` | `/lifting-workouts/{id}/exercise-video` | Video for one saved lift |
+
+Each exercise payload includes `demo_url` (play this), `media_kind` (`video` or `gif`), plus muscles, equipment, and instructions.
+
 ## MCP server
 
 Same process as the API, streamable HTTP at `/mcp`.
@@ -82,7 +107,7 @@ Authorization: Bearer <MCP_AGENT_TOKEN>
 
 Every tool takes `email` and/or `user_id` so one agent can act for either of you.
 
-**Read tools:** `resolve_user`, plus `list_*` / `get_*` for lifting workouts, cardio, gym locations, performance goals, physique photos, protein, steps, and body stats. Physique photos also expose `get_physic_photo_url` and `get_physique_comparison_photos` (latest vs goal, with download URLs).
+**Read tools:** `resolve_user`, plus `list_*` / `get_*` for lifting workouts, cardio, gym locations, performance goals, physique photos, protein, steps, and body stats. Physique photos also expose `get_physic_photo_url` and `get_physique_comparison_photos` (latest vs goal, with download URLs). ExerciseDB tools: `search_exercise_videos`, `get_exercise_video`, and `get_workout_exercise_videos` (matches each saved lift to a demo MP4 or GIF).
 
 **Write tools (create / update / delete only):** lifting workouts, cardio, protein, steps.
 

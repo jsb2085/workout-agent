@@ -1,6 +1,12 @@
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
 from app.schemas.body_stats import BodyStatsCreate, BodyStatsRead, BodyStatsUpdate
 from app.schemas.cardio import CardioCreate, CardioRead, CardioUpdate
+from app.schemas.exercise import (
+    ExerciseSearchResponse,
+    ExerciseVideo,
+    WorkoutExerciseVideo,
+    WorkoutExerciseVideosResponse,
+)
 from app.schemas.gym_location import GymLocationCreate, GymLocationRead, GymLocationUpdate
 from app.schemas.lifting_workout import LiftingWorkoutCreate, LiftingWorkoutRead, LiftingWorkoutUpdate
 from app.schemas.performance_goal import PerformanceGoalCreate, PerformanceGoalRead, PerformanceGoalUpdate
@@ -22,6 +28,10 @@ __all__ = [
     "CardioCreate",
     "CardioRead",
     "CardioUpdate",
+    "ExerciseSearchResponse",
+    "ExerciseVideo",
+    "WorkoutExerciseVideo",
+    "WorkoutExerciseVideosResponse",
     "LoginRequest",
     "RegisterRequest",
     "GymLocationCreate",

@@ -2,6 +2,8 @@ from fastapi import APIRouter
 
 from app.api.auth import router as auth_router
 from app.api.crud import crud_router
+from app.api.exercises import router as exercises_router
+from app.api.exercises import workout_video_router
 from app.api.physic_photos import router as physic_photos_router
 from app.models.body_stats import BodyStats
 from app.models.cardio import Cardio
@@ -24,6 +26,8 @@ from app.schemas.steps import StepsCreate, StepsRead, StepsUpdate
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
+api_router.include_router(exercises_router)
+api_router.include_router(workout_video_router)
 api_router.include_router(
     crud_router(
         LiftingWorkout,

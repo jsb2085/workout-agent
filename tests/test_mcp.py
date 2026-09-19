@@ -50,6 +50,9 @@ async def test_mcp_write_tools_only_for_allowed_resources():
     assert "get_physic_photo_url" in names
     assert "list_body_stats" in names
     assert "get_body_stats" in names
+    assert "search_exercise_videos" in names
+    assert "get_exercise_video" in names
+    assert "get_workout_exercise_videos" in names
 
 
 def _tool_payload(result):
