@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     exercisedb_api_host: str = "edb-with-videos-and-images-by-ascendapi.p.rapidapi.com"
     exercisedb_base_url: str = ""
     exercisedb_timeout_seconds: float = 15.0
+    notion_token: str = ""
+    notion_database_id: str = ""
+    notion_data_source_id: str = ""
+    notion_template_id: str = ""
+    notion_version: str = ""
+    notion_timeout_seconds: float = 20.0
 
     @property
     def cors_origin_list(self) -> list[str]:

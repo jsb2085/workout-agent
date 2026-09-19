@@ -95,6 +95,49 @@ Authenticated REST:
 
 Each exercise payload includes `demo_url` (play this), `media_kind` (`video` or `gif`), plus muscles, equipment, and instructions.
 
+## Weekly plan → Notion
+
+The agent writes the week it just planned into a Notion database you can check off and work from. Postgres stays the source of truth; Notion is the working copy.
+
+### Design the template once
+
+1. Create a Notion [internal integration](https://www.notion.so/my-integrations) and copy the token into `NOTION_TOKEN`.
+2. Create a full-page database named **Weekly Workouts**.
+3. Add these properties (Name already exists as the title):
+
+| Property | Type | Why |
+|---|---|---|
+| Name | Title | Page title, e.g. `Jacob — Week of Sep 21–27` |
+| Week | Date (with end date) | The planned week |
+| Status | Select: `Planned`, `In progress`, `Done` | So you can run the week |
+| Focus | Text | e.g. hypertrophy / bench |
+| Athlete | Text | You or your wife |
+
+4. Optional: add a database template called **Weekly workout** with your own header/notes, then put its page id in `NOTION_TEMPLATE_ID`. The agent applies that template, then appends this week's checkable lifts and ExerciseDB demos.
+5. Share the database with the integration. Copy the database id from the URL into `NOTION_DATABASE_ID`.
+
+Suggested Notion views: a calendar on `Week`, and a board grouped by `Status`.
+
+The page body the agent fills is the working template:
+
+- Week title + focus callout
+- One heading per day (Mon–Sun)
+- A checkbox per lift (`5 reps @ 185`) and per cardio
+- ExerciseDB demo (MP4 or GIF) under each lift
+- Protein / steps goals
+- Rest days stay on the page so the week is complete
+
+### Publish
+
+After the agent creates the week's lifting/cardio/protein/steps rows:
+
+```bash
+workout notion publish-week --email you@example.com --week-start 2026-09-21 --focus "bench + squat"
+workout notion publish-week --email you@example.com --dry-run
+```
+
+Or MCP `publish_weekly_workout_to_notion` with the same fields (`dry_run=true` to preview). Pass `plan_json` if the agent authored a `WeeklyPlan` instead of reading saved rows.
+
 ## MCP server
 
 Same process as the API, streamable HTTP at `/mcp`.
@@ -107,7 +150,7 @@ Authorization: Bearer <MCP_AGENT_TOKEN>
 
 Every tool takes `email` and/or `user_id` so one agent can act for either of you.
 
-**Read tools:** `resolve_user`, plus `list_*` / `get_*` for lifting workouts, cardio, gym locations, performance goals, physique photos, protein, steps, and body stats. Physique photos also expose `get_physic_photo_url` and `get_physique_comparison_photos` (latest vs goal, with download URLs). ExerciseDB tools: `search_exercise_videos`, `get_exercise_video`, and `get_workout_exercise_videos` (matches each saved lift to a demo MP4 or GIF).
+**Read tools:** `resolve_user`, plus `list_*` / `get_*` for lifting workouts, cardio, gym locations, performance goals, physique photos, protein, steps, and body stats. Physique photos also expose `get_physic_photo_url` and `get_physique_comparison_photos` (latest vs goal, with download URLs). ExerciseDB tools: `search_exercise_videos`, `get_exercise_video`, and `get_workout_exercise_videos` (matches each saved lift to a demo MP4 or GIF). After planning a week, `publish_weekly_workout_to_notion` writes that week into the Notion template.
 
 **Write tools (create / update / delete only):** lifting workouts, cardio, protein, steps.
 

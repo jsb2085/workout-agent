@@ -33,6 +33,9 @@ dev = [
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
+[project.scripts]
+workout = "app.cli:main"
+
 [tool.setuptools.packages.find]
 include = ["app*"]
 

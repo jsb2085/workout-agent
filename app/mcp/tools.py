@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
+import json
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -15,7 +16,8 @@ from app.models.performance_goal import PerformanceGoal
 from app.models.physic_photo import PhysicPhoto
 from app.models.protein import Protein
 from app.models.steps import Steps
-from app.services import exercisedb, photos, records
+from app.schemas.weekly_plan import WeeklyPlan
+from app.services import exercisedb, notion, photos, records, weekly_plan as weekly_plan_service
 
 
 def _parse_dt(value: str) -> datetime:
@@ -557,3 +559,53 @@ def register_tools(mcp: FastMCP) -> None:
             "workouts": rows,
             "unmatched": unmatched,
         }
+
+    @mcp.tool
+    async def publish_weekly_workout_to_notion(
+        email: str | None = None,
+        user_id: str | None = None,
+        week_start: str | None = None,
+        week_end: str | None = None,
+        title: str | None = None,
+        focus: str | None = None,
+        notes: str | None = None,
+        include_videos: bool = True,
+        dry_run: bool = False,
+        plan_json: str | None = None,
+    ) -> dict[str, Any]:
+        """Publish the agent's weekly workout to the Notion Weekly Workouts template.
+
+        After creating the week's lifting/cardio/protein/steps rows, call this so the
+        user can check off lifts and watch ExerciseDB demos in Notion.
+
+        If plan_json is omitted, the week is assembled from saved workouts.
+        week_start is YYYY-MM-DD and defaults to this week's Monday.
+        dry_run=True returns the page payload without calling Notion.
+        """
+        plan: WeeklyPlan
+        if plan_json:
+            plan = WeeklyPlan.model_validate(json.loads(plan_json))
+            if include_videos:
+                plan = await weekly_plan_service.attach_videos(plan)
+        else:
+            start = weekly_plan_service.parse_week_start(week_start)
+            end = date.fromisoformat(week_end[:10]) if week_end else None
+            async with db_module.SessionLocal() as session:
+                user = await records.resolve_user(session, email=email, user_id=user_id)
+                plan = await weekly_plan_service.assemble_weekly_plan(
+                    session,
+                    user,
+                    week_start=start,
+                    week_end=end,
+                    focus=focus,
+                    notes=notes,
+                    include_videos=include_videos,
+                    title=title,
+                )
+        if title:
+            plan.title = title
+        if focus:
+            plan.focus = focus
+        if notes:
+            plan.notes = notes
+        return await notion.publish_weekly_plan(plan, dry_run=dry_run)

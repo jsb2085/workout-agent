@@ -20,6 +20,7 @@ from app.schemas.physic_photo import (
 from app.schemas.protein import ProteinCreate, ProteinRead, ProteinUpdate
 from app.schemas.steps import StepsCreate, StepsRead, StepsUpdate
 from app.schemas.user import UserRead
+from app.schemas.weekly_plan import PlannedCardio, PlannedDay, PlannedLift, WeeklyPlan
 
 __all__ = [
     "BodyStatsCreate",
@@ -56,4 +57,8 @@ __all__ = [
     "StepsUpdate",
     "TokenResponse",
     "UserRead",
+    "PlannedCardio",
+    "PlannedDay",
+    "PlannedLift",
+    "WeeklyPlan",
 ]

@@ -53,6 +53,7 @@ async def test_mcp_write_tools_only_for_allowed_resources():
     assert "search_exercise_videos" in names
     assert "get_exercise_video" in names
     assert "get_workout_exercise_videos" in names
+    assert "publish_weekly_workout_to_notion" in names
 
 
 def _tool_payload(result):
