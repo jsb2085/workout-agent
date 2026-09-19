@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date as Date
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -72,3 +73,17 @@ class WeeklyPlan(BaseModel):
     goals: list[PlannedGoal] = Field(default_factory=list)
     locations: list[PlannedLocation] = Field(default_factory=list)
     body_stats: BodyStatsSnapshot | None = None
+
+
+class PlanningContext(BaseModel):
+    """Everything LangGraph needs from Notion to plan a week."""
+
+    week_start: Date
+    week_end: Date
+    recent_lifts: list[dict[str, Any]] = Field(default_factory=list)
+    this_week_lifts: list[dict[str, Any]] = Field(default_factory=list)
+    recent_logs: list[dict[str, Any]] = Field(default_factory=list)
+    goals: list[dict[str, Any]] = Field(default_factory=list)
+    locations: list[dict[str, Any]] = Field(default_factory=list)
+    default_location: dict[str, Any] | None = None
+    latest_body_stats: dict[str, Any] | None = None

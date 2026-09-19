@@ -1,7 +1,2 @@
-WRITABLE_RESOURCES = frozenset(
-    {"protein", "steps", "lifting_workouts", "cardio", "goals", "workout_locations", "body_stats"}
-)
-READ_ONLY_RESOURCES = frozenset()
-
-WRITE_TOOL_PREFIXES = ("create_", "update_", "delete_")
-WRITE_TOOL_RESOURCES = WRITABLE_RESOURCES
+WRITE_TOOLS = frozenset({"push_weekly_plan"})
+READ_TOOLS = frozenset({"pull_planning_context", "search_exercise_videos", "get_exercise_video"})

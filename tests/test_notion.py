@@ -315,16 +315,20 @@ async def test_mcp_publish_from_notion(monkeypatch):
     monkeypatch.setattr(exercisedb, "videos_for_lift_names", lambda names: {})
 
     result = await mcp.call_tool(
-        "publish_weekly_workout_to_notion",
-        {"week_start": "2026-09-21", "dry_run": True, "include_videos": False},
+        "push_weekly_plan",
+        {
+            "plan_json": _sample_plan().model_dump_json(),
+            "dry_run": True,
+            "include_videos": False,
+        },
     )
     payload = _tool_payload(result)
     assert payload["dry_run"] is True
     todos = [block for block in payload["children"] if block["type"] == "to_do"]
-    assert any("deadlift" in block["to_do"]["rich_text"][0]["text"]["content"] for block in todos)
+    assert any("195" in block["to_do"]["rich_text"][0]["text"]["content"] for block in todos)
 
 
-def test_cli_publish_dry_run(tmp_path, capsys, monkeypatch):
+def test_cli_push_dry_run(tmp_path, capsys, monkeypatch):
     path = tmp_path / "week.json"
     path.write_text(_sample_plan().model_dump_json(), encoding="utf-8")
 
@@ -332,7 +336,57 @@ def test_cli_publish_dry_run(tmp_path, capsys, monkeypatch):
         return plan
 
     monkeypatch.setattr(weekly_plan_service, "attach_videos", fake_attach)
-    assert main(["notion", "publish", "--plan", str(path), "--dry-run", "--no-videos"]) == 0
+    assert main(["push", "--plan", str(path), "--dry-run", "--no-videos"]) == 0
     printed = capsys.readouterr().out
     assert "Week of Sep 21" in printed
     assert '"dry_run": true' in printed
+
+
+async def test_pull_context_shape(monkeypatch):
+    class FakeStore:
+        async def planning_context(self):
+            return {
+                "goals": [{"name": "Bench 225"}],
+                "locations": [{"name": "Home gym", "is_default": True}],
+                "default_location": {"name": "Home gym", "is_default": True},
+                "latest_body_stats": {"weight": "185"},
+            }
+
+        async def recent_performance(self):
+            return [{"lift": "bench press", "actual_weight": "195"}]
+
+        async def list_lifts(self, **kwargs):
+            return [{"lift": "squat", "date": "2026-09-21"}]
+
+        async def list_logs(self, **kwargs):
+            return [{"date": "2026-09-20", "protein_goal": 160}]
+
+    context = await weekly_plan_service.pull_context(
+        week_start=date(2026, 9, 21),
+        store=FakeStore(),
+    )
+    assert context.recent_lifts[0]["actual_weight"] == "195"
+    assert context.this_week_lifts[0]["lift"] == "squat"
+    assert context.latest_body_stats["weight"] == "185"
+
+
+async def test_push_plan_writes_lifts(monkeypatch):
+    created = []
+
+    class FakeStore:
+        async def create_lift(self, data):
+            created.append(data)
+            return {"id": f"lift-{len(created)}", **data}
+
+        async def upsert_log(self, data):
+            return data
+
+    async def fake_publish(plan, dry_run=False, client=None):
+        return {"dry_run": dry_run, "title": plan.title, "url": "https://notion.so/week"}
+
+    monkeypatch.setattr(weekly_plan_service, "attach_videos", lambda plan: plan)
+    monkeypatch.setattr(weekly_plan_service.notion, "publish_weekly_plan", fake_publish)
+    result = await weekly_plan_service.push_plan(_sample_plan(), dry_run=False, include_videos=False, store=FakeStore())
+    assert result["lift_count"] == 1
+    assert created[0]["lift"] == "bench press"
+    assert created[0]["goal_weight"] == "185"
