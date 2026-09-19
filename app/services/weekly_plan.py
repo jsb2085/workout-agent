@@ -1,46 +1,28 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta, timezone
-from typing import Any
+from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.models.cardio import Cardio
-from app.models.lifting_workout import LiftingWorkout
-from app.models.protein import Protein
-from app.models.steps import Steps
-from app.models.user import User
 from app.schemas.weekly_plan import PlannedCardio, PlannedDay, PlannedLift, WeeklyPlan
-from app.services import exercisedb, records
+from app.services import exercisedb, notion
 
 
 def monday_of(day: date) -> date:
     return day - timedelta(days=day.weekday())
 
 
-def week_bounds(week_start: date, week_end: date | None = None) -> tuple[datetime, datetime, date]:
-    end = week_end or (week_start + timedelta(days=6))
-    if end < week_start:
-        raise ValueError("week_end must be on or after week_start")
-    start_dt = datetime.combine(week_start, time.min, tzinfo=timezone.utc)
-    end_dt = datetime.combine(end, time.max, tzinfo=timezone.utc)
-    return start_dt, end_dt, end
+def parse_week_start(value: str | None, *, today: date | None = None) -> date:
+    if value:
+        return date.fromisoformat(value[:10])
+    return monday_of(today or datetime.now(timezone.utc).date())
 
 
-def _as_date(value: datetime) -> date:
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc).date()
-
-
-def cardio_kind(item: Cardio) -> str:
-    if item.sprint:
-        return "sprint"
-    if item.run:
-        return "run"
-    if item.walk:
-        return "walk"
-    return "cardio"
+def week_end_for(week_start: date, week_end: str | None = None) -> date:
+    if week_end:
+        end = date.fromisoformat(week_end[:10])
+        if end < week_start:
+            raise ValueError("week_end must be on or after week_start")
+        return end
+    return week_start + timedelta(days=6)
 
 
 def default_title(week_start: date, week_end: date, athlete: str | None = None) -> str:
@@ -54,33 +36,36 @@ def default_title(week_start: date, week_end: date, athlete: str | None = None) 
 
 
 async def assemble_weekly_plan(
-    session: AsyncSession,
-    user: User,
     *,
+    athlete: str,
     week_start: date,
     week_end: date | None = None,
     focus: str | None = None,
     notes: str | None = None,
-    include_videos: bool = True,
     title: str | None = None,
+    include_videos: bool = True,
+    store: notion.NotionStore | None = None,
 ) -> WeeklyPlan:
-    start_dt, end_dt, end = week_bounds(week_start, week_end)
-    lifts = await records.list_for_user(
-        session, LiftingWorkout, user.id, date_field="date_todo", date_from=start_dt, date_to=end_dt
+    end = week_end or week_end_for(week_start)
+    repo = store or notion.NotionStore()
+    lifts = await repo.list_lifts(
+        athlete=athlete,
+        date_from=week_start.isoformat(),
+        date_to=end.isoformat(),
     )
-    cardios = await records.list_for_user(
-        session, Cardio, user.id, date_field="date_todo", date_from=start_dt, date_to=end_dt
-    )
-    proteins = await records.list_for_user(
-        session, Protein, user.id, date_field="date_todo", date_from=start_dt, date_to=end_dt
-    )
-    step_logs = await records.list_for_user(
-        session, Steps, user.id, date_field="date_todo", date_from=start_dt, date_to=end_dt
-    )
+    logs: list[dict] = []
+    try:
+        logs = await repo.list_logs(
+            athlete=athlete,
+            date_from=week_start.isoformat(),
+            date_to=end.isoformat(),
+        )
+    except notion.NotionError:
+        logs = []
 
-    videos: dict[str, Any] = {}
+    videos: dict = {}
     if include_videos:
-        videos = await exercisedb.videos_for_lift_names([item.lift for item in lifts])
+        videos = await exercisedb.videos_for_lift_names([row["lift"] for row in lifts if row.get("lift")])
 
     by_day: dict[date, PlannedDay] = {}
     cursor = week_start
@@ -88,44 +73,46 @@ async def assemble_weekly_plan(
         by_day[cursor] = PlannedDay(date=cursor)
         cursor += timedelta(days=1)
 
-    for item in lifts:
-        day = by_day[_as_date(item.date_todo)]
-        exercise = videos.get(item.lift)
+    for row in lifts:
+        if not row.get("date"):
+            continue
+        day_key = date.fromisoformat(row["date"][:10])
+        if day_key not in by_day:
+            continue
+        day = by_day[day_key]
+        exercise = videos.get(row["lift"]) if row.get("lift") else None
         day.lifts.append(
             PlannedLift(
-                lift=item.lift,
-                reps=item.reps,
-                goal_weight=item.goal_weight,
-                actual_weight=item.actual_weight,
-                completed=item.completed,
+                lift=row.get("lift") or "",
+                reps=row.get("reps"),
+                goal_weight=row.get("goal_weight"),
+                actual_weight=row.get("actual_weight"),
+                completed=bool(row.get("completed")),
                 demo_url=exercise.demo_url if exercise else None,
                 media_kind=exercise.media_kind if exercise else None,
                 exercise_name=exercise.name if exercise else None,
-                workout_id=str(item.id),
+                workout_id=row.get("id"),
             )
         )
-    for item in cardios:
-        day = by_day[_as_date(item.date_todo)]
-        day.cardio.append(
-            PlannedCardio(
-                kind=cardio_kind(item),
-                distance=item.distance,
-                reps=item.reps,
-                completed=item.completed,
+    for row in logs:
+        if not row.get("date"):
+            continue
+        day_key = date.fromisoformat(row["date"][:10])
+        if day_key not in by_day:
+            continue
+        day = by_day[day_key]
+        if row.get("cardio_kind"):
+            day.cardio.append(
+                PlannedCardio(
+                    kind=row["cardio_kind"],
+                    distance=row.get("distance"),
+                    reps=row.get("cardio_reps"),
+                    completed=bool(row.get("cardio_completed")),
+                )
             )
-        )
-    latest_protein: dict[date, Protein] = {}
-    for item in proteins:
-        latest_protein[_as_date(item.date_todo)] = item
-    for day_date, item in latest_protein.items():
-        by_day[day_date].protein_goal = item.grams_goal
-    latest_steps: dict[date, Steps] = {}
-    for item in step_logs:
-        latest_steps[_as_date(item.date_todo)] = item
-    for day_date, item in latest_steps.items():
-        by_day[day_date].steps_goal = item.steps_goal
+        day.protein_goal = row.get("protein_goal")
+        day.steps_goal = row.get("steps_goal")
 
-    athlete = user.name or user.email
     return WeeklyPlan(
         week_start=week_start,
         week_end=end,
@@ -153,47 +140,3 @@ async def attach_videos(plan: WeeklyPlan) -> WeeklyPlan:
             lift.media_kind = exercise.media_kind
             lift.exercise_name = exercise.name
     return plan
-
-
-def parse_week_start(value: str | None, *, today: date | None = None) -> date:
-    if value:
-        return date.fromisoformat(value[:10])
-    return monday_of(today or datetime.now(timezone.utc).date())
-
-
-async def recent_lift_performance(
-    session: AsyncSession,
-    user: User,
-    *,
-    date_from: datetime | None = None,
-    date_to: datetime | None = None,
-) -> list[dict[str, Any]]:
-    """Latest actual weight per lift name, for planning the next week."""
-    workouts = await records.list_for_user(
-        session,
-        LiftingWorkout,
-        user.id,
-        date_field="date_todo",
-        date_from=date_from,
-        date_to=date_to,
-    )
-    latest: dict[str, LiftingWorkout] = {}
-    for item in workouts:
-        key = item.lift.casefold()
-        if key not in latest:
-            latest[key] = item
-    rows = []
-    for item in latest.values():
-        rows.append(
-            {
-                "lift": item.lift,
-                "actual_weight": item.actual_weight,
-                "goal_weight": item.goal_weight,
-                "reps": item.reps,
-                "completed": item.completed,
-                "date": item.date_todo.date().isoformat(),
-                "workout_id": str(item.id),
-            }
-        )
-    rows.sort(key=lambda row: row["date"], reverse=True)
-    return rows

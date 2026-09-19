@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date, datetime
 from typing import Any
 
 import httpx
@@ -13,19 +14,28 @@ NOTION_VERSION = "2022-06-28"
 NOTION_TEMPLATE_VERSION = "2026-03-11"
 CHILDREN_PAGE_SIZE = 100
 
-TITLE_ALIASES = ("Name", "Title", "Week name")
-WEEK_ALIASES = ("Week", "Week of", "Dates", "Date")
+TITLE_ALIASES = ("Name", "Title", "Week name", "Lift", "Exercise")
+WEEK_ALIASES = ("Week", "Week of", "Dates")
 STATUS_ALIASES = ("Status",)
 FOCUS_ALIASES = ("Focus", "Goal")
 ATHLETE_ALIASES = ("Athlete", "Person", "Who")
-LIFT_TITLE_ALIASES = ("Name", "Lift", "Exercise")
 LIFT_DATE_ALIASES = ("Date",)
 GOAL_WEIGHT_ALIASES = ("Goal weight", "Goal", "Planned weight")
 ACTUAL_WEIGHT_ALIASES = ("Actual weight", "Actual", "Weight")
 REPS_ALIASES = ("Reps",)
 COMPLETED_ALIASES = ("Completed", "Done")
-WORKOUT_ID_ALIASES = ("Workout id", "Workout ID", "workout_id")
-WEEK_START_ALIASES = ("Week start", "Week")
+WEEK_START_ALIASES = ("Week start",)
+DISTANCE_ALIASES = ("Distance",)
+CARDIO_KIND_ALIASES = ("Cardio", "Cardio kind")
+PROTEIN_GOAL_ALIASES = ("Protein goal",)
+PROTEIN_ACTUAL_ALIASES = ("Protein actual",)
+STEPS_GOAL_ALIASES = ("Steps goal",)
+STEPS_ACTUAL_ALIASES = ("Steps actual",)
+SPRINT_ALIASES = ("Sprint",)
+RUN_ALIASES = ("Run",)
+WALK_ALIASES = ("Walk",)
+CARDIO_REPS_ALIASES = ("Cardio reps",)
+CARDIO_DONE_ALIASES = ("Cardio completed",)
 
 
 class NotionError(Exception):
@@ -63,11 +73,7 @@ def _callout(content: str) -> dict[str, Any]:
 
 
 def _todo(content: str, *, checked: bool = False) -> dict[str, Any]:
-    return {
-        "object": "block",
-        "type": "to_do",
-        "to_do": {"rich_text": _rich(content), "checked": checked},
-    }
+    return {"object": "block", "type": "to_do", "to_do": {"rich_text": _rich(content), "checked": checked}}
 
 
 def _media_block(url: str, media_kind: str | None) -> dict[str, Any]:
@@ -76,78 +82,6 @@ def _media_block(url: str, media_kind: str | None) -> dict[str, Any]:
     if media_kind == "gif" or (url or "").endswith(".gif"):
         return {"object": "block", "type": "image", "image": {"type": "external", "external": {"url": url}}}
     return {"object": "block", "type": "bookmark", "bookmark": {"url": url}}
-
-
-def _lift_label(lift: PlannedLift) -> str:
-    parts = [lift.lift]
-    details: list[str] = []
-    if lift.sets:
-        details.append(f"{lift.sets}x")
-    if lift.reps is not None:
-        details.append(f"{lift.reps} reps")
-    if lift.goal_weight:
-        details.append(f"@ {lift.goal_weight}")
-    if details:
-        parts.append("— " + " ".join(details))
-    if lift.exercise_name and lift.exercise_name.casefold() != lift.lift.casefold():
-        parts.append(f"({lift.exercise_name})")
-    return " ".join(parts)
-
-
-def _cardio_label(item: PlannedCardio) -> str:
-    parts = [item.kind.title()]
-    if item.distance:
-        parts.append(item.distance)
-    if item.reps:
-        parts.append(f"{item.reps} reps")
-    return " ".join(parts)
-
-
-def _day_blocks(day: PlannedDay) -> list[dict[str, Any]]:
-    heading = f"{day.date.strftime('%A')} {day.date.day}"
-    if day.focus:
-        heading = f"{heading} — {day.focus}"
-    blocks: list[dict[str, Any]] = [_heading(heading, 2)]
-    if not day.lifts and not day.cardio:
-        blocks.append(_paragraph("Rest / no sessions planned", italic=True))
-    for lift in day.lifts:
-        blocks.append(_todo(_lift_label(lift), checked=lift.completed))
-        if lift.demo_url:
-            blocks.append(_media_block(lift.demo_url, lift.media_kind))
-        if lift.notes:
-            blocks.append(_paragraph(lift.notes, italic=True))
-    for cardio in day.cardio:
-        blocks.append(_todo(_cardio_label(cardio), checked=cardio.completed))
-    extras: list[str] = []
-    if day.protein_goal is not None:
-        extras.append(f"Protein {day.protein_goal}g")
-    if day.steps_goal is not None:
-        extras.append(f"Steps {day.steps_goal:,}")
-    if extras:
-        blocks.append(_paragraph(" · ".join(extras)))
-    if day.notes:
-        blocks.append(_paragraph(day.notes))
-    return blocks
-
-
-def build_page_children(plan: WeeklyPlan) -> list[dict[str, Any]]:
-    """Designed weekly-workout template body: goal, checkable lifts, demo media."""
-    blocks: list[dict[str, Any]] = [_heading(plan.title, 1)]
-    if plan.focus:
-        blocks.append(_callout(plan.focus))
-    if plan.notes:
-        blocks.append(_paragraph(plan.notes))
-    blocks.append(
-        _paragraph(
-            "Check off lifts here for the session. Log the weight you actually "
-            "hit in the Workout Lifts table (Actual weight). The agent syncs "
-            "those numbers before it plans next week.",
-            italic=True,
-        )
-    )
-    for day in plan.days:
-        blocks.extend(_day_blocks(day))
-    return blocks
 
 
 def _find_property(schema: dict[str, Any], aliases: tuple[str, ...], *types: str) -> str | None:
@@ -164,28 +98,97 @@ def _find_property(schema: dict[str, Any], aliases: tuple[str, ...], *types: str
     return None
 
 
-def build_page_properties(plan: WeeklyPlan, schema: dict[str, Any] | None = None) -> dict[str, Any]:
-    schema = schema or {"properties": {"Name": {"type": "title"}}}
-    properties: dict[str, Any] = {}
-    title_name = _find_property(schema, TITLE_ALIASES, "title") or "Name"
-    properties[title_name] = {"title": [{"type": "text", "text": {"content": plan.title[:2000]}}]}
+def _plain(prop: dict[str, Any] | None) -> str | None:
+    if not prop:
+        return None
+    kind = prop.get("type")
+    if kind in {"title", "rich_text"}:
+        parts = prop.get(kind) or []
+        text = "".join(str(part.get("plain_text") or part.get("text", {}).get("content") or "") for part in parts)
+        return text.strip() or None
+    if kind == "number":
+        value = prop.get("number")
+        return None if value is None else str(value)
+    if kind == "checkbox":
+        return "true" if prop.get("checkbox") else "false"
+    if kind == "date":
+        return (prop.get("date") or {}).get("start")
+    if kind == "select" and prop.get("select"):
+        return prop["select"].get("name")
+    return None
 
-    week_name = _find_property(schema, WEEK_ALIASES, "date")
-    if week_name:
-        properties[week_name] = {
-            "date": {"start": plan.week_start.isoformat(), "end": plan.week_end.isoformat()}
-        }
-    status_name = _find_property(schema, STATUS_ALIASES, "select", "status")
-    if status_name:
-        status_type = (schema.get("properties") or {}).get(status_name, {}).get("type", "select")
-        properties[status_name] = {status_type: {"name": "Planned"}}
-    focus_name = _find_property(schema, FOCUS_ALIASES, "rich_text")
-    if focus_name and plan.focus:
-        properties[focus_name] = {"rich_text": _rich(plan.focus)}
-    athlete_name = _find_property(schema, ATHLETE_ALIASES, "rich_text")
-    if athlete_name and plan.athlete:
-        properties[athlete_name] = {"rich_text": _rich(plan.athlete)}
-    return properties
+
+def _write_value(prop_schema: dict[str, Any], value: Any) -> dict[str, Any] | None:
+    kind = prop_schema.get("type")
+    if value is None or value == "":
+        if kind == "title":
+            return {"title": []}
+        if kind == "rich_text":
+            return {"rich_text": []}
+        if kind == "number":
+            return {"number": None}
+        if kind == "checkbox":
+            return {"checkbox": False}
+        if kind == "date":
+            return {"date": None}
+        if kind == "select":
+            return {"select": None}
+        return None
+    if kind == "title":
+        return {"title": [{"type": "text", "text": {"content": str(value)[:2000]}}]}
+    if kind == "rich_text":
+        return {"rich_text": _rich(str(value))}
+    if kind == "number":
+        try:
+            return {"number": float(str(value).replace(",", ""))}
+        except ValueError:
+            return None
+    if kind == "checkbox":
+        if isinstance(value, bool):
+            checked = value
+        else:
+            checked = str(value).lower() not in {"false", "0", "no", ""}
+        return {"checkbox": checked}
+    if kind == "date":
+        return {"date": {"start": str(value)[:10]}}
+    if kind == "select":
+        return {"select": {"name": str(value)}}
+    return None
+
+
+def _prop(schema: dict[str, Any], aliases: tuple[str, ...], *types: str) -> tuple[str, dict[str, Any]] | None:
+    name = _find_property(schema, aliases, *types)
+    if not name:
+        return None
+    return name, (schema.get("properties") or {}).get(name) or {}
+
+
+def _read(props: dict[str, Any], schema: dict[str, Any], aliases: tuple[str, ...], *types: str) -> str | None:
+    name = _find_property(schema, aliases, *types) or _find_property({"properties": props}, aliases)
+    if not name:
+        return None
+    return _plain(props.get(name))
+
+
+def _as_bool(value: str | None) -> bool:
+    return (value or "").lower() in {"true", "1", "yes"}
+
+
+def _as_int(value: str | None) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(float(value))
+    except ValueError:
+        return None
+
+
+def _require_athlete(athlete: str | None) -> str:
+    settings = get_settings()
+    name = (athlete or settings.notion_default_athlete or "").strip()
+    if not name:
+        raise NotionError("Provide athlete or set NOTION_DEFAULT_ATHLETE", 400)
+    return name
 
 
 def page_url(page: dict[str, Any]) -> str:
@@ -202,8 +205,7 @@ class NotionClient:
     def _headers(self) -> dict[str, str]:
         if not self.token:
             raise NotionError(
-                "NOTION_TOKEN is not set. Create an integration at https://www.notion.so/my-integrations "
-                "and share the Weekly Workouts database with it.",
+                "NOTION_TOKEN is not set. Create an integration and share the workout databases with it.",
                 400,
             )
         return {
@@ -213,10 +215,11 @@ class NotionClient:
         }
 
     async def request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> Any:
-        url = f"{NOTION_API}{path}"
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.request(method, url, headers=self._headers(), json=payload)
+                response = await client.request(
+                    method, f"{NOTION_API}{path}", headers=self._headers(), json=payload
+                )
         except httpx.TimeoutException as exc:
             raise NotionError("Notion request timed out", 504) from exc
         except httpx.HTTPError as exc:
@@ -235,8 +238,14 @@ class NotionClient:
     async def retrieve_database(self, database_id: str) -> dict[str, Any]:
         return await self.request("GET", f"/databases/{database_id}")
 
+    async def retrieve_page(self, page_id: str) -> dict[str, Any]:
+        return await self.request("GET", f"/pages/{page_id}")
+
     async def create_page(self, payload: dict[str, Any]) -> dict[str, Any]:
         return await self.request("POST", "/pages", payload)
+
+    async def update_page(self, page_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return await self.request("PATCH", f"/pages/{page_id}", payload)
 
     async def append_children(self, block_id: str, children: list[dict[str, Any]]) -> dict[str, Any]:
         return await self.request("PATCH", f"/blocks/{block_id}/children", {"children": children})
@@ -245,18 +254,11 @@ class NotionClient:
         body = await self.request("GET", f"/blocks/{block_id}/children?page_size=10")
         return list((body or {}).get("results") or [])
 
-    async def update_page(self, page_id: str, properties: dict[str, Any]) -> dict[str, Any]:
-        return await self.request("PATCH", f"/pages/{page_id}", {"properties": properties})
-
-    async def query_database(
-        self,
-        database_id: str,
-        payload: dict[str, Any] | None = None,
-    ) -> list[dict[str, Any]]:
+    async def query_database(self, database_id: str, payload: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
         cursor = None
         while True:
-            body: dict[str, Any] = dict(payload or {})
+            body = dict(payload or {})
             if cursor:
                 body["start_cursor"] = cursor
             page = await self.request("POST", f"/databases/{database_id}/query", body)
@@ -264,6 +266,373 @@ class NotionClient:
             if not page.get("has_more"):
                 return results
             cursor = page.get("next_cursor")
+
+
+def default_lift_schema() -> dict[str, Any]:
+    return {
+        "properties": {
+            "Name": {"type": "title"},
+            "Date": {"type": "date"},
+            "Goal weight": {"type": "rich_text"},
+            "Actual weight": {"type": "rich_text"},
+            "Reps": {"type": "number"},
+            "Completed": {"type": "checkbox"},
+            "Athlete": {"type": "rich_text"},
+            "Week start": {"type": "date"},
+        }
+    }
+
+
+def default_log_schema() -> dict[str, Any]:
+    return {
+        "properties": {
+            "Name": {"type": "title"},
+            "Date": {"type": "date"},
+            "Athlete": {"type": "rich_text"},
+            "Sprint": {"type": "checkbox"},
+            "Run": {"type": "checkbox"},
+            "Walk": {"type": "checkbox"},
+            "Distance": {"type": "rich_text"},
+            "Cardio reps": {"type": "number"},
+            "Cardio completed": {"type": "checkbox"},
+            "Protein goal": {"type": "number"},
+            "Protein actual": {"type": "number"},
+            "Steps goal": {"type": "number"},
+            "Steps actual": {"type": "number"},
+        }
+    }
+
+
+def parse_lift_page(page: dict[str, Any], schema: dict[str, Any] | None = None) -> dict[str, Any]:
+    props = page.get("properties") or {}
+    schema = schema or {"properties": {name: {"type": value.get("type")} for name, value in props.items()}}
+    return {
+        "id": page.get("id"),
+        "url": page_url(page),
+        "lift": _read(props, schema, TITLE_ALIASES, "title", "rich_text"),
+        "date": (_read(props, schema, LIFT_DATE_ALIASES, "date") or "")[:10] or None,
+        "goal_weight": _read(props, schema, GOAL_WEIGHT_ALIASES, "rich_text", "number"),
+        "actual_weight": _read(props, schema, ACTUAL_WEIGHT_ALIASES, "rich_text", "number"),
+        "reps": _as_int(_read(props, schema, REPS_ALIASES, "number", "rich_text")),
+        "completed": _as_bool(_read(props, schema, COMPLETED_ALIASES, "checkbox")),
+        "athlete": _read(props, schema, ATHLETE_ALIASES, "rich_text"),
+        "week_start": (_read(props, schema, WEEK_START_ALIASES, "date") or "")[:10] or None,
+    }
+
+
+def parse_log_page(page: dict[str, Any], schema: dict[str, Any] | None = None) -> dict[str, Any]:
+    props = page.get("properties") or {}
+    schema = schema or {"properties": {name: {"type": value.get("type")} for name, value in props.items()}}
+    sprint = _as_bool(_read(props, schema, SPRINT_ALIASES, "checkbox"))
+    run = _as_bool(_read(props, schema, RUN_ALIASES, "checkbox"))
+    walk = _as_bool(_read(props, schema, WALK_ALIASES, "checkbox"))
+    kind = "sprint" if sprint else "run" if run else "walk" if walk else None
+    return {
+        "id": page.get("id"),
+        "url": page_url(page),
+        "date": (_read(props, schema, LIFT_DATE_ALIASES, "date") or "")[:10] or None,
+        "athlete": _read(props, schema, ATHLETE_ALIASES, "rich_text"),
+        "sprint": sprint,
+        "run": run,
+        "walk": walk,
+        "cardio_kind": kind,
+        "distance": _read(props, schema, DISTANCE_ALIASES, "rich_text"),
+        "cardio_reps": _as_int(_read(props, schema, CARDIO_REPS_ALIASES, "number", "rich_text")),
+        "cardio_completed": _as_bool(_read(props, schema, CARDIO_DONE_ALIASES, "checkbox")),
+        "protein_goal": _as_int(_read(props, schema, PROTEIN_GOAL_ALIASES, "number", "rich_text")),
+        "protein_actual": _as_int(_read(props, schema, PROTEIN_ACTUAL_ALIASES, "number", "rich_text")),
+        "steps_goal": _as_int(_read(props, schema, STEPS_GOAL_ALIASES, "number", "rich_text")),
+        "steps_actual": _as_int(_read(props, schema, STEPS_ACTUAL_ALIASES, "number", "rich_text")),
+    }
+
+
+def _fill(
+    schema: dict[str, Any],
+    data: dict[str, Any],
+    mapping: list[tuple[tuple[str, ...], tuple[str, ...], str]],
+) -> dict[str, Any]:
+    properties: dict[str, Any] = {}
+    for aliases, types, key in mapping:
+        if key not in data:
+            continue
+        found = _prop(schema, aliases, *types)
+        if not found:
+            continue
+        name, prop_schema = found
+        written = _write_value(prop_schema, data.get(key))
+        if written is not None:
+            properties[name] = written
+    return properties
+
+
+def build_lift_properties(data: dict[str, Any], schema: dict[str, Any] | None = None) -> dict[str, Any]:
+    schema = schema or default_lift_schema()
+    return _fill(
+        schema,
+        data,
+        [
+            (TITLE_ALIASES, ("title",), "lift"),
+            (LIFT_DATE_ALIASES, ("date",), "date"),
+            (GOAL_WEIGHT_ALIASES, ("rich_text", "number"), "goal_weight"),
+            (ACTUAL_WEIGHT_ALIASES, ("rich_text", "number"), "actual_weight"),
+            (REPS_ALIASES, ("number", "rich_text"), "reps"),
+            (COMPLETED_ALIASES, ("checkbox",), "completed"),
+            (ATHLETE_ALIASES, ("rich_text",), "athlete"),
+            (WEEK_START_ALIASES, ("date",), "week_start"),
+        ],
+    )
+
+
+def build_log_properties(data: dict[str, Any], schema: dict[str, Any] | None = None) -> dict[str, Any]:
+    schema = schema or default_log_schema()
+    payload = dict(data)
+    if "name" not in payload and (payload.get("date") or payload.get("athlete")):
+        payload["name"] = f"{payload.get('date') or ''} {payload.get('athlete') or ''}".strip()
+    return _fill(
+        schema,
+        payload,
+        [
+            (TITLE_ALIASES, ("title",), "name"),
+            (LIFT_DATE_ALIASES, ("date",), "date"),
+            (ATHLETE_ALIASES, ("rich_text",), "athlete"),
+            (SPRINT_ALIASES, ("checkbox",), "sprint"),
+            (RUN_ALIASES, ("checkbox",), "run"),
+            (WALK_ALIASES, ("checkbox",), "walk"),
+            (DISTANCE_ALIASES, ("rich_text",), "distance"),
+            (CARDIO_REPS_ALIASES, ("number", "rich_text"), "cardio_reps"),
+            (CARDIO_DONE_ALIASES, ("checkbox",), "cardio_completed"),
+            (PROTEIN_GOAL_ALIASES, ("number", "rich_text"), "protein_goal"),
+            (PROTEIN_ACTUAL_ALIASES, ("number", "rich_text"), "protein_actual"),
+            (STEPS_GOAL_ALIASES, ("number", "rich_text"), "steps_goal"),
+            (STEPS_ACTUAL_ALIASES, ("number", "rich_text"), "steps_actual"),
+        ],
+    )
+
+
+def _in_range(value: str | None, start: str | None, end: str | None) -> bool:
+    if not value:
+        return False
+    day = value[:10]
+    if start and day < start[:10]:
+        return False
+    if end and day > end[:10]:
+        return False
+    return True
+
+
+class NotionStore:
+    def __init__(self, client: NotionClient | None = None):
+        self.client = client or NotionClient()
+        self._schemas: dict[str, dict[str, Any]] = {}
+
+    async def schema(self, database_id: str, fallback: dict[str, Any]) -> dict[str, Any]:
+        if database_id in self._schemas:
+            return self._schemas[database_id]
+        try:
+            schema = await self.client.retrieve_database(database_id)
+        except NotionError:
+            schema = fallback
+        self._schemas[database_id] = schema
+        return schema
+
+    async def list_lifts(
+        self,
+        *,
+        athlete: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> list[dict[str, Any]]:
+        settings = get_settings()
+        if not settings.notion_lifts_database_id:
+            raise NotionError("NOTION_LIFTS_DATABASE_ID is not set", 400)
+        schema = await self.schema(settings.notion_lifts_database_id, default_lift_schema())
+        pages = await self.client.query_database(settings.notion_lifts_database_id)
+        who = _require_athlete(athlete) if athlete or settings.notion_default_athlete else None
+        rows = [parse_lift_page(page, schema) for page in pages]
+        if who:
+            rows = [row for row in rows if (row.get("athlete") or "").casefold() == who.casefold()]
+        if date_from or date_to:
+            rows = [row for row in rows if _in_range(row.get("date"), date_from, date_to)]
+        rows.sort(key=lambda row: row.get("date") or "", reverse=True)
+        return rows
+
+    async def get_lift(self, item_id: str) -> dict[str, Any]:
+        page = await self.client.retrieve_page(item_id)
+        schema = default_lift_schema()
+        settings = get_settings()
+        if settings.notion_lifts_database_id:
+            schema = await self.schema(settings.notion_lifts_database_id, default_lift_schema())
+        return parse_lift_page(page, schema)
+
+    async def create_lift(self, data: dict[str, Any]) -> dict[str, Any]:
+        settings = get_settings()
+        if not settings.notion_lifts_database_id:
+            raise NotionError("NOTION_LIFTS_DATABASE_ID is not set", 400)
+        payload = dict(data)
+        payload["athlete"] = _require_athlete(payload.get("athlete"))
+        schema = await self.schema(settings.notion_lifts_database_id, default_lift_schema())
+        page = await self.client.create_page(
+            {
+                "parent": {"database_id": settings.notion_lifts_database_id},
+                "properties": build_lift_properties(payload, schema),
+            }
+        )
+        return parse_lift_page(page, schema)
+
+    async def update_lift(self, item_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        settings = get_settings()
+        schema = default_lift_schema()
+        if settings.notion_lifts_database_id:
+            schema = await self.schema(settings.notion_lifts_database_id, default_lift_schema())
+        page = await self.client.update_page(item_id, {"properties": build_lift_properties(data, schema)})
+        return parse_lift_page(page, schema)
+
+    async def delete_lift(self, item_id: str) -> str:
+        await self.client.update_page(item_id, {"archived": True})
+        return "deleted"
+
+    async def recent_performance(self, athlete: str | None = None) -> list[dict[str, Any]]:
+        rows = await self.list_lifts(athlete=athlete)
+        latest: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            key = (row.get("lift") or "").casefold()
+            if not key or key in latest:
+                continue
+            latest[key] = row
+        return list(latest.values())
+
+    async def list_logs(
+        self,
+        *,
+        athlete: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> list[dict[str, Any]]:
+        settings = get_settings()
+        if not settings.notion_logs_database_id:
+            raise NotionError("NOTION_LOGS_DATABASE_ID is not set", 400)
+        schema = await self.schema(settings.notion_logs_database_id, default_log_schema())
+        pages = await self.client.query_database(settings.notion_logs_database_id)
+        who = _require_athlete(athlete) if athlete or settings.notion_default_athlete else None
+        rows = [parse_log_page(page, schema) for page in pages]
+        if who:
+            rows = [row for row in rows if (row.get("athlete") or "").casefold() == who.casefold()]
+        if date_from or date_to:
+            rows = [row for row in rows if _in_range(row.get("date"), date_from, date_to)]
+        rows.sort(key=lambda row: row.get("date") or "", reverse=True)
+        return rows
+
+    async def upsert_log(self, data: dict[str, Any]) -> dict[str, Any]:
+        settings = get_settings()
+        if not settings.notion_logs_database_id:
+            raise NotionError("NOTION_LOGS_DATABASE_ID is not set", 400)
+        payload = dict(data)
+        payload["athlete"] = _require_athlete(payload.get("athlete"))
+        schema = await self.schema(settings.notion_logs_database_id, default_log_schema())
+        existing = await self.list_logs(athlete=payload["athlete"], date_from=payload.get("date"), date_to=payload.get("date"))
+        properties = build_log_properties(payload, schema)
+        if existing and existing[0].get("id"):
+            page = await self.client.update_page(existing[0]["id"], {"properties": properties})
+        else:
+            page = await self.client.create_page(
+                {"parent": {"database_id": settings.notion_logs_database_id}, "properties": properties}
+            )
+        return parse_log_page(page, schema)
+
+    async def get_log(self, item_id: str) -> dict[str, Any]:
+        page = await self.client.retrieve_page(item_id)
+        schema = default_log_schema()
+        settings = get_settings()
+        if settings.notion_logs_database_id:
+            schema = await self.schema(settings.notion_logs_database_id, default_log_schema())
+        return parse_log_page(page, schema)
+
+    async def delete_log(self, item_id: str) -> str:
+        await self.client.update_page(item_id, {"archived": True})
+        return "deleted"
+
+
+def _lift_label(lift: PlannedLift) -> str:
+    parts = [lift.lift]
+    details: list[str] = []
+    if lift.reps is not None:
+        details.append(f"{lift.reps} reps")
+    weight = lift.actual_weight or lift.goal_weight
+    if weight:
+        details.append(f"@ {weight}")
+        if lift.actual_weight and lift.goal_weight and lift.actual_weight != lift.goal_weight:
+            details.append(f"(goal {lift.goal_weight})")
+    if details:
+        parts.append("— " + " ".join(details))
+    return " ".join(parts)
+
+
+def _day_blocks(day: PlannedDay) -> list[dict[str, Any]]:
+    heading = f"{day.date.strftime('%A')} {day.date.day}"
+    if day.focus:
+        heading = f"{heading} — {day.focus}"
+    blocks: list[dict[str, Any]] = [_heading(heading, 2)]
+    if not day.lifts and not day.cardio:
+        blocks.append(_paragraph("Rest / no sessions planned", italic=True))
+    for lift in day.lifts:
+        blocks.append(_todo(_lift_label(lift), checked=lift.completed))
+        if lift.demo_url:
+            blocks.append(_media_block(lift.demo_url, lift.media_kind))
+    for cardio in day.cardio:
+        label = cardio.kind.title()
+        if cardio.distance:
+            label = f"{label} {cardio.distance}"
+        blocks.append(_todo(label, checked=cardio.completed))
+    extras: list[str] = []
+    if day.protein_goal is not None:
+        extras.append(f"Protein {day.protein_goal}g")
+    if day.steps_goal is not None:
+        extras.append(f"Steps {day.steps_goal:,}")
+    if extras:
+        blocks.append(_paragraph(" · ".join(extras)))
+    return blocks
+
+
+def build_page_children(plan: WeeklyPlan) -> list[dict[str, Any]]:
+    blocks: list[dict[str, Any]] = [_heading(plan.title, 1)]
+    if plan.focus:
+        blocks.append(_callout(plan.focus))
+    if plan.notes:
+        blocks.append(_paragraph(plan.notes))
+    blocks.append(
+        _paragraph(
+            "Log Actual weight on the Workout Lifts row. That number is what next week’s plan uses.",
+            italic=True,
+        )
+    )
+    for day in plan.days:
+        blocks.extend(_day_blocks(day))
+    return blocks
+
+
+def build_week_properties(plan: WeeklyPlan, schema: dict[str, Any] | None = None) -> dict[str, Any]:
+    schema = schema or {"properties": {"Name": {"type": "title"}}}
+    properties = _fill(
+        schema,
+        {
+            "title": plan.title,
+            "status": "Planned",
+            "focus": plan.focus,
+            "athlete": plan.athlete,
+        },
+        [
+            (TITLE_ALIASES, ("title",), "title"),
+            (STATUS_ALIASES, ("select", "status"), "status"),
+            (FOCUS_ALIASES, ("rich_text",), "focus"),
+            (ATHLETE_ALIASES, ("rich_text",), "athlete"),
+        ],
+    )
+    week_name = _find_property(schema, WEEK_ALIASES, "date")
+    if week_name:
+        properties[week_name] = {
+            "date": {"start": plan.week_start.isoformat(), "end": plan.week_end.isoformat()}
+        }
+    return properties
 
 
 def _chunk(items: list[dict[str, Any]], size: int = CHILDREN_PAGE_SIZE) -> list[list[dict[str, Any]]]:
@@ -278,27 +647,22 @@ async def publish_weekly_plan(
 ) -> dict[str, Any]:
     settings = get_settings()
     children = build_page_children(plan)
-    schema: dict[str, Any] | None = None
     notion = client or NotionClient()
+    schema = None
     if not dry_run:
         if not settings.notion_database_id:
-            raise NotionError(
-                "NOTION_DATABASE_ID is not set. Create a Weekly Workouts database and share it with the integration.",
-                400,
-            )
+            raise NotionError("NOTION_DATABASE_ID is not set", 400)
         try:
             schema = await notion.retrieve_database(settings.notion_database_id)
         except NotionError:
             schema = None
-    properties = build_page_properties(plan, schema)
+    properties = build_week_properties(plan, schema)
     preview = {
         "parent": {"database_id": settings.notion_database_id or "<NOTION_DATABASE_ID>"},
         "properties": properties,
         "children": children,
         "title": plan.title,
     }
-    lift_rows = await publish_lift_rows(plan, dry_run=dry_run, client=notion)
-    preview["lift_rows"] = lift_rows
     if dry_run:
         return {"dry_run": True, "url": None, "page_id": None, **preview}
 
@@ -306,36 +670,30 @@ async def publish_weekly_plan(
         "parent": {"database_id": settings.notion_database_id},
         "properties": properties,
     }
-    template_id = settings.notion_template_id
-    if template_id:
-        create_payload["template"] = {"type": "template_id", "template_id": template_id}
+    if settings.notion_template_id:
+        create_payload["template"] = {"type": "template_id", "template_id": settings.notion_template_id}
         if settings.notion_data_source_id:
             create_payload["parent"] = {
                 "type": "data_source_id",
                 "data_source_id": settings.notion_data_source_id,
             }
         notion.version = settings.notion_version or NOTION_TEMPLATE_VERSION
-    else:
-        first, rest = (children[:CHILDREN_PAGE_SIZE], children[CHILDREN_PAGE_SIZE:])
-        create_payload["children"] = first
-        rest_chunks = _chunk(rest)
         page = await notion.create_page(create_payload)
-        for extra in rest_chunks:
+        for _ in range(20):
+            try:
+                if await notion.list_children(page["id"]):
+                    break
+            except NotionError:
+                pass
+            await asyncio.sleep(0.4)
+        for extra in _chunk(children):
             await notion.append_children(page["id"], extra)
-        return {
-            "dry_run": False,
-            "url": page_url(page),
-            "page_id": page.get("id"),
-            "title": plan.title,
-            "week_start": plan.week_start.isoformat(),
-            "week_end": plan.week_end.isoformat(),
-            "lift_rows": lift_rows,
-        }
-
-    page = await notion.create_page(create_payload)
-    await _wait_for_template(notion, page["id"])
-    for extra in _chunk(children):
-        await notion.append_children(page["id"], extra)
+    else:
+        first, rest = children[:CHILDREN_PAGE_SIZE], children[CHILDREN_PAGE_SIZE:]
+        create_payload["children"] = first
+        page = await notion.create_page(create_payload)
+        for extra in _chunk(rest):
+            await notion.append_children(page["id"], extra)
     return {
         "dry_run": False,
         "url": page_url(page),
@@ -343,309 +701,18 @@ async def publish_weekly_plan(
         "title": plan.title,
         "week_start": plan.week_start.isoformat(),
         "week_end": plan.week_end.isoformat(),
-        "used_template": True,
-        "lift_rows": lift_rows,
     }
 
 
-async def _wait_for_template(notion: NotionClient, page_id: str, *, attempts: int = 20) -> None:
-    for _ in range(attempts):
-        try:
-            children = await notion.list_children(page_id)
-        except NotionError:
-            children = []
-        if children:
-            return
-        await asyncio.sleep(0.4)
+def parse_day(value: str) -> str:
+    return value.replace("Z", "+00:00")[:10]
 
 
-def _plain(prop: dict[str, Any] | None) -> str | None:
-    if not prop:
+def coerce_date(value: str | date | datetime | None) -> str | None:
+    if value is None:
         return None
-    kind = prop.get("type")
-    if kind in {"title", "rich_text"}:
-        parts = prop.get(kind) or []
-        text = "".join(str(part.get("plain_text") or part.get("text", {}).get("content") or "") for part in parts)
-        return text.strip() or None
-    if kind == "number":
-        value = prop.get("number")
-        return None if value is None else str(value)
-    if kind == "checkbox":
-        return "true" if prop.get("checkbox") else "false"
-    if kind == "date":
-        date = prop.get("date") or {}
-        return date.get("start")
-    if kind == "select" and prop.get("select"):
-        return prop["select"].get("name")
-    return None
-
-
-def _write_value(prop_schema: dict[str, Any], value: Any) -> dict[str, Any] | None:
-    if value is None or value == "":
-        return None
-    kind = prop_schema.get("type")
-    if kind == "title":
-        return {"title": [{"type": "text", "text": {"content": str(value)[:2000]}}]}
-    if kind == "rich_text":
-        return {"rich_text": _rich(str(value))}
-    if kind == "number":
-        try:
-            return {"number": float(str(value).replace(",", ""))}
-        except ValueError:
-            return None
-    if kind == "checkbox":
-        return {"checkbox": bool(value) and str(value).lower() not in {"false", "0", "no"}}
-    if kind == "date":
-        return {"date": {"start": str(value)[:10]}}
-    return None
-
-
-def _prop(schema: dict[str, Any], aliases: tuple[str, ...], *types: str) -> tuple[str, dict[str, Any]] | None:
-    name = _find_property(schema, aliases, *types)
-    if not name:
-        return None
-    return name, (schema.get("properties") or {}).get(name) or {}
-
-
-def build_lift_properties(
-    lift: PlannedLift,
-    day_date: str,
-    plan: WeeklyPlan,
-    schema: dict[str, Any] | None = None,
-    *,
-    include_actual: bool = True,
-) -> dict[str, Any]:
-    schema = schema or {
-        "properties": {
-            "Name": {"type": "title"},
-            "Date": {"type": "date"},
-            "Goal weight": {"type": "rich_text"},
-            "Actual weight": {"type": "rich_text"},
-            "Reps": {"type": "number"},
-            "Completed": {"type": "checkbox"},
-            "Workout id": {"type": "rich_text"},
-            "Athlete": {"type": "rich_text"},
-            "Week start": {"type": "date"},
-        }
-    }
-    properties: dict[str, Any] = {}
-    mapping = [
-        (LIFT_TITLE_ALIASES, ("title",), lift.lift),
-        (LIFT_DATE_ALIASES, ("date",), day_date),
-        (GOAL_WEIGHT_ALIASES, ("rich_text", "number"), lift.goal_weight),
-        (REPS_ALIASES, ("number", "rich_text"), lift.reps),
-        (WORKOUT_ID_ALIASES, ("rich_text", "title"), lift.workout_id),
-        (ATHLETE_ALIASES, ("rich_text",), plan.athlete),
-        (WEEK_START_ALIASES, ("date",), plan.week_start.isoformat()),
-    ]
-    if include_actual:
-        mapping.append((COMPLETED_ALIASES, ("checkbox",), lift.completed))
-        mapping.append((ACTUAL_WEIGHT_ALIASES, ("rich_text", "number"), lift.actual_weight))
-    for aliases, types, value in mapping:
-        found = _prop(schema, aliases, *types)
-        if not found:
-            continue
-        name, prop_schema = found
-        written = _write_value(prop_schema, value)
-        if written:
-            properties[name] = written
-    return properties
-
-
-def parse_lift_page(page: dict[str, Any], schema: dict[str, Any] | None = None) -> dict[str, Any]:
-    props = page.get("properties") or {}
-    schema = schema or {"properties": {name: {"type": value.get("type")} for name, value in props.items()}}
-
-    def read(aliases: tuple[str, ...], *types: str) -> str | None:
-        name = _find_property(schema, aliases, *types) or _find_property({"properties": props}, aliases)
-        if not name:
-            return None
-        return _plain(props.get(name))
-
-    completed_raw = read(COMPLETED_ALIASES, "checkbox")
-    return {
-        "notion_page_id": page.get("id"),
-        "lift": read(LIFT_TITLE_ALIASES, "title", "rich_text"),
-        "date": read(LIFT_DATE_ALIASES, "date"),
-        "goal_weight": read(GOAL_WEIGHT_ALIASES, "rich_text", "number"),
-        "actual_weight": read(ACTUAL_WEIGHT_ALIASES, "rich_text", "number"),
-        "reps": read(REPS_ALIASES, "number", "rich_text"),
-        "completed": completed_raw in {"true", "True", "1"} if completed_raw is not None else None,
-        "workout_id": read(WORKOUT_ID_ALIASES, "rich_text", "title"),
-        "athlete": read(ATHLETE_ALIASES, "rich_text"),
-        "week_start": read(WEEK_START_ALIASES, "date"),
-    }
-
-
-def planned_lifts(plan: WeeklyPlan) -> list[tuple[str, PlannedLift]]:
-    rows: list[tuple[str, PlannedLift]] = []
-    for day in plan.days:
-        for lift in day.lifts:
-            rows.append((day.date.isoformat(), lift))
-    return rows
-
-
-async def publish_lift_rows(
-    plan: WeeklyPlan,
-    *,
-    dry_run: bool = False,
-    client: NotionClient | None = None,
-    schema: dict[str, Any] | None = None,
-) -> list[dict[str, Any]]:
-    settings = get_settings()
-    lifts_db = settings.notion_lifts_database_id
-    notion = client or NotionClient()
-    if not lifts_db and not dry_run:
-        return []
-    if not dry_run and lifts_db:
-        try:
-            schema = schema or await notion.retrieve_database(lifts_db)
-        except NotionError:
-            schema = schema
-    existing: dict[str, dict[str, Any]] = {}
-    if not dry_run and lifts_db:
-        for page in await notion.query_database(lifts_db):
-            parsed = parse_lift_page(page, schema)
-            if parsed.get("workout_id"):
-                existing[str(parsed["workout_id"])] = page
-    published: list[dict[str, Any]] = []
-    for day_date, lift in planned_lifts(plan):
-        properties = build_lift_properties(lift, day_date, plan, schema, include_actual=not lift.workout_id or lift.workout_id not in existing)
-        if dry_run or not lifts_db:
-            published.append(
-                {
-                    "action": "preview",
-                    "workout_id": lift.workout_id,
-                    "lift": lift.lift,
-                    "date": day_date,
-                    "properties": properties,
-                }
-            )
-            continue
-        page = existing.get(lift.workout_id or "")
-        if page:
-            safe_props = build_lift_properties(lift, day_date, plan, schema, include_actual=False)
-            updated = await notion.update_page(page["id"], safe_props)
-            published.append(
-                {
-                    "action": "updated",
-                    "workout_id": lift.workout_id,
-                    "lift": lift.lift,
-                    "date": day_date,
-                    "page_id": updated.get("id"),
-                    "url": page_url(updated),
-                }
-            )
-        else:
-            created = await notion.create_page(
-                {"parent": {"database_id": lifts_db}, "properties": properties}
-            )
-            published.append(
-                {
-                    "action": "created",
-                    "workout_id": lift.workout_id,
-                    "lift": lift.lift,
-                    "date": day_date,
-                    "page_id": created.get("id"),
-                    "url": page_url(created),
-                }
-            )
-    return published
-
-
-async def fetch_notion_lifts(
-    *,
-    week_start: str | None = None,
-    athlete: str | None = None,
-    client: NotionClient | None = None,
-) -> list[dict[str, Any]]:
-    settings = get_settings()
-    if not settings.notion_lifts_database_id:
-        raise NotionError(
-            "NOTION_LIFTS_DATABASE_ID is not set. Create a Workout Lifts database so Actual weight can sync back.",
-            400,
-        )
-    notion = client or NotionClient()
-    schema = await notion.retrieve_database(settings.notion_lifts_database_id)
-    pages = await notion.query_database(settings.notion_lifts_database_id)
-    rows = [parse_lift_page(page, schema) for page in pages]
-    if week_start:
-        rows = [row for row in rows if (row.get("week_start") or "")[:10] == week_start[:10]]
-    if athlete:
-        rows = [row for row in rows if (row.get("athlete") or "").casefold() == athlete.casefold()]
-    return rows
-
-
-async def apply_notion_lift_updates(session, user, rows: list[dict[str, Any]]) -> dict[str, Any]:
-    from uuid import UUID
-
-    from app.models.lifting_workout import LiftingWorkout
-    from app.services import records
-
-    applied: list[dict[str, Any]] = []
-    skipped: list[dict[str, Any]] = []
-    for row in rows:
-        actual = (row.get("actual_weight") or "").strip()
-        completed = row.get("completed")
-        if not actual and completed is None:
-            skipped.append({**row, "reason": "no actual weight or completed flag"})
-            continue
-        item = None
-        if row.get("workout_id"):
-            try:
-                item = await records.get_for_user(session, LiftingWorkout, user.id, UUID(str(row["workout_id"])))
-            except ValueError:
-                item = None
-        if item is None and row.get("lift") and row.get("date"):
-            workouts = await records.list_for_user(session, LiftingWorkout, user.id, date_field="date_todo")
-            for candidate in workouts:
-                if candidate.lift.casefold() != str(row["lift"]).casefold():
-                    continue
-                if candidate.date_todo.date().isoformat() != str(row["date"])[:10]:
-                    continue
-                item = candidate
-                break
-        if item is None:
-            skipped.append({**row, "reason": "no matching lifting workout"})
-            continue
-        data: dict[str, Any] = {}
-        if actual:
-            data["actual_weight"] = actual
-        if completed is True:
-            data["completed"] = True
-        if not data:
-            skipped.append({**row, "reason": "nothing to update"})
-            continue
-        updated = await records.update_for_user(session, LiftingWorkout, user.id, item.id, data)
-        applied.append(
-            {
-                "workout_id": str(item.id),
-                "lift": item.lift,
-                "date": item.date_todo.date().isoformat(),
-                "actual_weight": updated.actual_weight if updated else actual,
-                "completed": updated.completed if updated else item.completed,
-                "notion_page_id": row.get("notion_page_id"),
-            }
-        )
-    return {"updated": applied, "skipped": skipped}
-
-
-async def sync_lifts_from_notion(
-    session,
-    user,
-    *,
-    week_start: str | None = None,
-    dry_run: bool = False,
-    client: NotionClient | None = None,
-) -> dict[str, Any]:
-    rows = await fetch_notion_lifts(
-        week_start=week_start,
-        athlete=user.name or user.email,
-        client=client,
-    )
-    if not rows:
-        rows = await fetch_notion_lifts(week_start=week_start, client=client)
-    if dry_run:
-        return {"dry_run": True, "fetched": rows, "updated": [], "skipped": []}
-    result = await apply_notion_lift_updates(session, user, rows)
-    return {"dry_run": False, "fetched": rows, **result}
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return parse_day(value)

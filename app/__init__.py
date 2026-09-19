@@ -1,1 +1,1 @@
-"""Workout Agent API."""
+"""Notion-backed workout agent."""
