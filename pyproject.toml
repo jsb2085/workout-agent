@@ -1,0 +1,42 @@
+[project]
+name = "workout-agent"
+version = "0.1.0"
+description = "FastAPI workout tracker with Postgres, MinIO, and an MCP server for a LangChain agent"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30.0",
+    "alembic>=1.14.0",
+    "psycopg[binary]>=3.2.0",
+    "pydantic-settings>=2.6.0",
+    "python-multipart>=0.0.17",
+    "PyJWT>=2.10.0",
+    "bcrypt>=4.2.0",
+    "minio>=7.2.0",
+    "fastmcp>=2.10.0",
+    "httpx>=0.28.0",
+    "greenlet>=3.1.0",
+    "email-validator>=2.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "aiosqlite>=0.20.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
