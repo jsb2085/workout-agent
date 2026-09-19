@@ -58,23 +58,16 @@ def test_normalize_v1_gif():
 
 async def test_find_exercise_video_ranks_and_fills_media(monkeypatch):
     async def fake_search(**kwargs):
-        return [exercisedb.normalize_exercise({"exerciseId": "exr_fly", "name": "cable fly"})], 1
-
-    async def fake_names(query: str):
-        assert query == "bench press"
         return [
-            exercisedb.normalize_exercise(
-                {"exerciseId": "exr_bench", "name": "barbell bench press"},
-                match_score=65,
-            )
-        ]
+            exercisedb.normalize_exercise({"exerciseId": "exr_fly", "name": "cable fly"}),
+            exercisedb.normalize_exercise({"exerciseId": "exr_bench", "name": "barbell bench press"}),
+        ], 2
 
     async def fake_get(exercise_id: str):
         assert exercise_id == "exr_bench"
         return exercisedb.normalize_exercise(BENCH)
 
     monkeypatch.setattr(exercisedb, "search_exercises", fake_search)
-    monkeypatch.setattr(exercisedb, "search_exercise_names", fake_names)
     monkeypatch.setattr(exercisedb, "get_exercise", fake_get)
 
     match = await exercisedb.find_exercise_video("bench press")
@@ -127,11 +120,41 @@ async def test_request_json_uses_free_host_without_key(monkeypatch):
     assert "X-RapidAPI-Key" not in captured["headers"]
 
 
-def test_score_name_match_prefers_exact():
-    assert exercisedb.score_name_match("bench press", "Barbell Bench Press") > exercisedb.score_name_match(
-        "bench press", "cable fly"
+def test_score_name_match_prefers_canonical_lifts():
+    assert exercisedb.score_name_match("bench press", "barbell bench press") > exercisedb.score_name_match(
+        "bench press", "barbell wide reverse grip bench press horizontal"
+    )
+    assert exercisedb.score_name_match("squat", "barbell squat") > exercisedb.score_name_match(
+        "squat", "squat to overhead reach with twist"
+    )
+    assert exercisedb.score_name_match("squat", "barbell squat") > exercisedb.score_name_match("squat", "squat jerk")
+    assert exercisedb.score_name_match("deadlift", "barbell deadlift") > exercisedb.score_name_match(
+        "deadlift", "barbell sumo deadlift"
     )
     assert exercisedb.score_name_match("squat", "squat") == 100
+
+
+def test_lookup_queries_adds_barbell_aliases():
+    queries = [item.casefold() for item in exercisedb.lookup_queries("bench press")]
+    assert "barbell bench press" in queries
+    assert "bench press" in queries
+
+
+async def test_search_exercises_merges_canonical_alias(monkeypatch):
+    async def fake_list(params):
+        name = (params.get("name") or "").casefold()
+        if name == "barbell bench press":
+            return [exercisedb.normalize_exercise(BENCH)], 1
+        return [exercisedb.normalize_exercise({"exerciseId": "exr_incline", "name": "barbell incline bench press"})], 8
+
+    async def fail_search(_query: str):
+        raise exercisedb.ExerciseDBError("worker limit", 502)
+
+    monkeypatch.setattr(exercisedb, "_list_exercises", fake_list)
+    monkeypatch.setattr(exercisedb, "search_exercise_names", fail_search)
+    exercises, _total = await exercisedb.search_exercises(name="bench press", limit=5)
+    assert exercises[0].exercise_id == "exr_bench"
+    assert exercises[0].demo_url.endswith("bench.mp4")
 
 
 async def test_search_exercises_requires_auth(client):

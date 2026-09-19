@@ -10,6 +10,25 @@ from app.schemas.exercise import ExerciseVideo
 
 FREE_EXERCISEDB_BASE_URL = "https://oss.exercisedb.dev"
 RESOLUTION_PREFERENCE = ("720p", "480p", "360p", "1080p")
+CANONICAL_QUERIES = {
+    "bench": ["barbell bench press"],
+    "bench press": ["barbell bench press"],
+    "incline bench": ["barbell incline bench press"],
+    "incline bench press": ["barbell incline bench press"],
+    "squat": ["barbell squat"],
+    "back squat": ["barbell squat"],
+    "front squat": ["barbell front squat"],
+    "deadlift": ["barbell deadlift"],
+    "rdl": ["barbell romanian deadlift"],
+    "romanian deadlift": ["barbell romanian deadlift"],
+    "ohp": ["overhead press", "barbell seated overhead press"],
+    "overhead press": ["barbell seated overhead press"],
+    "military press": ["barbell seated overhead press"],
+    "row": ["barbell bent over row"],
+    "barbell row": ["barbell bent over row"],
+    "bent over row": ["barbell bent over row"],
+}
+KNOWN_EQUIPMENT = {"barbell", "dumbbell", "cable", "smith", "band", "ez", "kettlebell"}
 
 
 class ExerciseDBError(Exception):
@@ -104,27 +123,57 @@ def normalize_exercise(raw: dict[str, Any], *, match_score: int | None = None) -
     )
 
 
+def _normalize_name(value: str) -> str:
+    cleaned = value.casefold().replace("(", " ").replace(")", " ").replace("-", " ")
+    return " ".join(cleaned.split())
+
+
+def lookup_queries(query: str) -> list[str]:
+    """Original lift name plus canonical ExerciseDB aliases."""
+    normalized = _normalize_name(query)
+    queries: list[str] = []
+    for item in [query.strip(), *CANONICAL_QUERIES.get(normalized, [])]:
+        if item and _normalize_name(item) not in {_normalize_name(existing) for existing in queries}:
+            queries.append(item)
+    first = normalized.split()[0] if normalized else ""
+    if first and first not in KNOWN_EQUIPMENT:
+        prefixed = f"barbell {normalized}"
+        if _normalize_name(prefixed) not in {_normalize_name(existing) for existing in queries}:
+            queries.append(prefixed)
+    return queries
+
+
 def score_name_match(query: str, name: str) -> int:
-    needle = " ".join(query.casefold().split())
-    haystack = " ".join(name.casefold().split())
+    needle = _normalize_name(query)
+    haystack = _normalize_name(name)
     if not needle or not haystack:
         return 0
     if haystack == needle:
         return 100
-    if haystack.startswith(needle):
-        return 85
-    if needle.startswith(haystack):
-        return 75
-    if needle in haystack:
-        return 65
-    if haystack in needle:
-        return 55
-    query_tokens = set(needle.split())
-    name_tokens = set(haystack.split())
-    overlap = query_tokens & name_tokens
+
+    query_tokens = needle.split()
+    name_tokens = haystack.split()
+    extra = max(0, len(name_tokens) - len(query_tokens))
+    phrase = any(
+        name_tokens[index : index + len(query_tokens)] == query_tokens
+        for index in range(0, len(name_tokens) - len(query_tokens) + 1)
+    )
+
+    if name_tokens[:1] == ["barbell"] and name_tokens[1:] == query_tokens:
+        return 96
+    if phrase:
+        score = 86 - extra * 8
+        if name_tokens[: len(query_tokens)] == query_tokens and extra:
+            score -= 10
+        if "barbell" in name_tokens:
+            score += 8
+        return max(20, score)
+    if set(query_tokens) <= set(name_tokens):
+        return max(15, 55 - extra * 8)
+    overlap = set(query_tokens) & set(name_tokens)
     if overlap:
-        return 40 + int(30 * len(overlap) / max(len(query_tokens), 1))
-    return 10
+        return max(5, int(30 * len(overlap) / len(query_tokens)) - extra * 2)
+    return 0
 
 
 def _error_message(payload: Any, fallback: str) -> str:
@@ -187,6 +236,15 @@ def _unwrap_meta_total(payload: Any) -> int | None:
     return None
 
 
+async def _list_exercises(params: dict[str, Any]) -> tuple[list[ExerciseVideo], int | None]:
+    payload = await request_json("/api/v1/exercises", params)
+    rows = _unwrap_data(payload)
+    if not isinstance(rows, list):
+        rows = [rows] if rows else []
+    exercises = [normalize_exercise(row) for row in rows if isinstance(row, dict)]
+    return exercises, _unwrap_meta_total(payload)
+
+
 async def search_exercises(
     *,
     name: str | None = None,
@@ -198,25 +256,44 @@ async def search_exercises(
     limit: int = 10,
 ) -> tuple[list[ExerciseVideo], int | None]:
     limit = max(1, min(limit, 25))
-    payload = await request_json(
-        "/api/v1/exercises",
-        {
-            "name": name,
-            "bodyParts": body_parts,
-            "equipments": equipments,
-            "targetMuscles": target_muscles,
-            "exerciseType": exercise_type,
-            "keywords": keywords,
-            "limit": str(limit),
-        },
-    )
-    rows = _unwrap_data(payload)
-    if not isinstance(rows, list):
-        rows = [rows] if rows else []
-    exercises = [normalize_exercise(row) for row in rows if isinstance(row, dict)]
-    if name:
-        exercises.sort(key=lambda item: score_name_match(name, item.name), reverse=True)
-    return exercises, _unwrap_meta_total(payload)
+    params = {
+        "name": name,
+        "bodyParts": body_parts,
+        "equipments": equipments,
+        "targetMuscles": target_muscles,
+        "exerciseType": exercise_type,
+        "keywords": keywords,
+        "limit": str(limit),
+    }
+    exercises, total = await _list_exercises(params)
+    if not name:
+        return exercises, total
+
+    by_id = {item.exercise_id: item for item in exercises if item.exercise_id}
+    try:
+        for item in await search_exercise_names(name):
+            if item.exercise_id and item.exercise_id not in by_id:
+                by_id[item.exercise_id] = item
+    except ExerciseDBError:
+        pass
+
+    best = max((score_name_match(name, item.name) for item in by_id.values()), default=0)
+    if best < 90:
+        for alias in lookup_queries(name)[1:2]:
+            try:
+                more, _ = await _list_exercises({**params, "name": alias})
+            except ExerciseDBError:
+                more = []
+            for item in more:
+                if item.exercise_id and item.exercise_id not in by_id:
+                    by_id[item.exercise_id] = item
+
+    ranked = sorted(
+        by_id.values(),
+        key=lambda item: score_name_match(name, item.name),
+        reverse=True,
+    )[:limit]
+    return ranked, total
 
 
 async def search_exercise_names(query: str) -> list[ExerciseVideo]:
@@ -259,28 +336,38 @@ async def _with_media(exercise: ExerciseVideo) -> ExerciseVideo:
     return detailed
 
 
+async def _candidates_for(query: str) -> list[ExerciseVideo]:
+    try:
+        named, _ = await search_exercises(name=query, limit=15)
+        return named
+    except ExerciseDBError:
+        try:
+            return await search_exercise_names(query)
+        except ExerciseDBError:
+            return []
+
+
 async def find_exercise_video(query: str) -> ExerciseVideo | None:
     needle = query.strip()
     if not needle:
         return None
 
-    named, _ = await search_exercises(name=needle, limit=10)
-    suggestions = await search_exercise_names(needle)
-    candidates = {item.exercise_id: item for item in named if item.exercise_id}
-    for item in suggestions:
-        existing = candidates.get(item.exercise_id)
-        if existing is None or (item.match_score or 0) > (existing.match_score or 0):
-            scored = item.model_copy(update={"match_score": score_name_match(needle, item.name)})
-            candidates[item.exercise_id] = scored
-
-    ranked = sorted(
-        candidates.values(),
-        key=lambda item: (item.match_score or score_name_match(needle, item.name), bool(item.demo_url)),
-        reverse=True,
-    )
-    if not ranked:
+    best: ExerciseVideo | None = None
+    best_score = -1
+    for lookup in lookup_queries(needle):
+        for item in await _candidates_for(lookup):
+            score = max(score_name_match(needle, item.name), score_name_match(lookup, item.name))
+            scored = item.model_copy(update={"match_score": score})
+            if score > best_score or (
+                score == best_score and best is not None and scored.demo_url and not best.demo_url
+            ):
+                best = scored
+                best_score = score
+        if best_score >= 90:
+            break
+    if best is None or best_score < 25:
         return None
-    return await _with_media(ranked[0])
+    return await _with_media(best)
 
 
 async def videos_for_lift_names(lift_names: list[str]) -> dict[str, ExerciseVideo | None]:
