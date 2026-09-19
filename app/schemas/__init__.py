@@ -6,6 +6,7 @@ from app.schemas.weekly_plan import (
     PlannedGoal,
     PlannedLift,
     PlannedLocation,
+    PlanningContext,
     WeeklyPlan,
 )
 
@@ -18,5 +19,6 @@ __all__ = [
     "PlannedGoal",
     "PlannedLift",
     "PlannedLocation",
+    "PlanningContext",
     "WeeklyPlan",
 ]
