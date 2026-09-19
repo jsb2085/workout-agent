@@ -9,6 +9,7 @@ from app.schemas.weekly_plan import (
     PlannedGoal,
     PlannedLift,
     PlannedLocation,
+    PlanningContext,
     WeeklyPlan,
 )
 from app.services import exercisedb, notion
@@ -199,3 +200,105 @@ async def attach_videos(plan: WeeklyPlan) -> WeeklyPlan:
             lift.media_kind = exercise.media_kind
             lift.exercise_name = exercise.name
     return plan
+
+
+async def pull_context(
+    *,
+    week_start: date | None = None,
+    week_end: date | None = None,
+    store: notion.NotionStore | None = None,
+) -> PlanningContext:
+    start = week_start or parse_week_start(None)
+    end = week_end_for(start, week_end.isoformat() if week_end else None)
+    repo = store or notion.NotionStore()
+    profile = await _optional(repo, "planning_context", {}) or {}
+    recent_lifts = await _optional(repo, "recent_performance", [])
+    this_week = await _optional_list(
+        repo,
+        "list_lifts",
+        date_from=start.isoformat(),
+        date_to=end.isoformat(),
+    )
+    recent_logs = await _optional_list(
+        repo,
+        "list_logs",
+        date_from=(start - timedelta(days=14)).isoformat(),
+        date_to=end.isoformat(),
+    )
+    return PlanningContext(
+        week_start=start,
+        week_end=end,
+        recent_lifts=recent_lifts or [],
+        this_week_lifts=this_week,
+        recent_logs=recent_logs,
+        goals=profile.get("goals") or [],
+        locations=profile.get("locations") or [],
+        default_location=profile.get("default_location"),
+        latest_body_stats=profile.get("latest_body_stats"),
+    )
+
+
+async def _optional_list(repo, name: str, **kwargs) -> list:
+    method = getattr(repo, name, None)
+    if method is None:
+        return []
+    try:
+        return await method(**kwargs)
+    except notion.NotionError:
+        return []
+
+
+async def push_plan(
+    plan: WeeklyPlan,
+    *,
+    dry_run: bool = False,
+    include_videos: bool = True,
+    store: notion.NotionStore | None = None,
+) -> dict:
+    if include_videos:
+        plan = await attach_videos(plan)
+    repo = store or notion.NotionStore()
+    written: list[dict] = []
+    if not dry_run:
+        for day in plan.days:
+            for lift in day.lifts:
+                payload = {
+                    "lift": lift.lift,
+                    "goal_weight": lift.goal_weight,
+                    "reps": lift.reps,
+                    "date": day.date.isoformat(),
+                    "week_start": plan.week_start.isoformat(),
+                    "completed": lift.completed,
+                }
+                if lift.actual_weight:
+                    payload["actual_weight"] = lift.actual_weight
+                if lift.workout_id:
+                    row = await repo.update_lift(lift.workout_id, payload)
+                else:
+                    row = await repo.create_lift(payload)
+                    lift.workout_id = row.get("id")
+                written.append(row)
+            log: dict = {"date": day.date.isoformat()}
+            if day.cardio:
+                cardio = day.cardio[0]
+                log.update(
+                    {
+                        "distance": cardio.distance,
+                        "cardio_reps": cardio.reps,
+                        "cardio_completed": cardio.completed,
+                        "sprint": cardio.kind == "sprint",
+                        "run": cardio.kind == "run",
+                        "walk": cardio.kind == "walk",
+                    }
+                )
+            if day.protein_goal is not None:
+                log["protein_goal"] = day.protein_goal
+            if day.steps_goal is not None:
+                log["steps_goal"] = day.steps_goal
+            if len(log) > 1:
+                try:
+                    await repo.upsert_log(log)
+                except notion.NotionError:
+                    pass
+    published = await notion.publish_weekly_plan(plan, dry_run=dry_run)
+    return {**published, "lifts_written": written, "lift_count": len(written)}

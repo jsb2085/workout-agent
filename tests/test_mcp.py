@@ -1,6 +1,23 @@
-from app.mcp.permissions import READ_ONLY_RESOURCES, WRITABLE_RESOURCES
+from datetime import date
+
+from app.mcp.permissions import READ_TOOLS, WRITE_TOOLS
 from app.mcp.server import mcp
-from app.services import exercisedb, notion
+from app.schemas.weekly_plan import PlannedDay, PlannedLift, WeeklyPlan
+from app.services import exercisedb, weekly_plan as weekly_plan_service
+
+
+def _sample_plan() -> WeeklyPlan:
+    return WeeklyPlan(
+        week_start=date(2026, 9, 21),
+        week_end=date(2026, 9, 27),
+        title="Week of Sep 21–27",
+        days=[
+            PlannedDay(
+                date=date(2026, 9, 21),
+                lifts=[PlannedLift(lift="bench press", reps=5, goal_weight="185")],
+            )
+        ],
+    )
 
 
 def _tool_payload(result):
@@ -28,65 +45,15 @@ async def test_health(client):
     assert response.json()["status"] == "ok"
 
 
-async def test_mcp_write_tools_only_for_allowed_resources():
+async def test_mcp_exposes_pull_and_push_only():
     tools = await mcp.list_tools()
     names = {tool.name for tool in tools}
-
-    for resource in WRITABLE_RESOURCES:
-        prefix = resource.removesuffix("s") if resource.endswith("s") and resource != "steps" else resource
-        if resource == "lifting_workouts":
-            prefix = "lifting_workout"
-        elif resource == "workout_locations":
-            prefix = "workout_location"
-        elif resource == "body_stats":
-            prefix = "body_stats"
-        assert f"create_{prefix}" in names
-        assert f"update_{prefix}" in names
-        assert f"delete_{prefix}" in names
-
-    assert READ_ONLY_RESOURCES == frozenset()
-    assert "search_exercise_videos" in names
-    assert "get_exercise_video" in names
-    assert "publish_weekly_workout_to_notion" in names
-    assert "get_recent_lift_performance" in names
-    assert "get_planning_context" in names
-    assert "create_physic_photo" not in names
-    assert "sync_notion_workouts_to_agent" not in names
-    assert "resolve_user" not in names
-
-
-async def test_mcp_create_lift_uses_notion(monkeypatch):
-    async def fake_create(self, data):
-        return {"id": "lift-1", **data}
-
-    monkeypatch.setattr(notion.NotionStore, "create_lift", fake_create)
-    created = await mcp.call_tool(
-        "create_lifting_workout",
-        {
-            "lift": "bench press",
-            "goal_weight": "185",
-            "reps": 5,
-            "date_todo": "2026-09-21",
-        },
-    )
-    payload = _tool_payload(created)
-    assert payload["lift"] == "bench press"
-    assert payload["actual_weight"] is None
-    assert "athlete" not in payload
-
-
-async def test_mcp_update_lift_actual_weight(monkeypatch):
-    async def fake_update(self, item_id, data):
-        return {"id": item_id, **data}
-
-    monkeypatch.setattr(notion.NotionStore, "update_lift", fake_update)
-    updated = await mcp.call_tool(
-        "update_lifting_workout",
-        {"item_id": "lift-1", "actual_weight": "195"},
-    )
-    payload = _tool_payload(updated)
-    assert payload["id"] == "lift-1"
-    assert payload["actual_weight"] == "195"
+    assert WRITE_TOOLS <= names
+    assert READ_TOOLS <= names
+    assert names == WRITE_TOOLS | READ_TOOLS
+    assert "create_lifting_workout" not in names
+    assert "create_goal" not in names
+    assert "publish_weekly_workout_to_notion" not in names
 
 
 async def test_old_rest_routes_are_gone(client):
@@ -95,42 +62,50 @@ async def test_old_rest_routes_are_gone(client):
     assert (await client.get("/exercises")).status_code == 404
 
 
-async def test_mcp_recent_and_search(monkeypatch):
-    async def fake_recent(self):
-        return [{"lift": "bench press", "actual_weight": "195", "goal_weight": "185"}]
+async def test_mcp_pull_and_push(monkeypatch):
+    class FakeStore:
+        async def planning_context(self):
+            return {
+                "goals": [{"name": "Bench 225", "target": "225", "status": "Active"}],
+                "locations": [{"name": "Home gym", "is_default": True}],
+                "default_location": {"name": "Home gym", "is_default": True},
+                "latest_body_stats": {"weight": "185", "bench": "195"},
+            }
 
+        async def recent_performance(self):
+            return [{"lift": "bench press", "actual_weight": "195", "goal_weight": "185"}]
+
+        async def list_lifts(self, **kwargs):
+            return []
+
+        async def list_logs(self, **kwargs):
+            return []
+
+    monkeypatch.setattr(weekly_plan_service.notion, "NotionStore", FakeStore)
+    pulled = await mcp.call_tool("pull_planning_context", {"week_start": "2026-09-21"})
+    payload = _tool_payload(pulled)
+    assert payload["recent_lifts"][0]["actual_weight"] == "195"
+    assert payload["goals"][0]["name"] == "Bench 225"
+
+    async def fake_push(plan, **kwargs):
+        return {"dry_run": True, "title": plan.title, "lift_count": 1}
+
+    monkeypatch.setattr(weekly_plan_service, "push_plan", fake_push)
+    pushed = await mcp.call_tool(
+        "push_weekly_plan",
+        {"plan_json": _sample_plan().model_dump_json(), "dry_run": True, "include_videos": False},
+    )
+    assert _tool_payload(pushed)["dry_run"] is True
+
+
+async def test_mcp_search_videos(monkeypatch):
     async def fake_search(**kwargs):
-        return [exercisedb.normalize_exercise({"exerciseId": "exr_bench", "name": "Bench Press", "videoUrl": "https://cdn.example/bench.mp4"})], 1
+        return [
+            exercisedb.normalize_exercise(
+                {"exerciseId": "exr_bench", "name": "Bench Press", "videoUrl": "https://cdn.example/bench.mp4"}
+            )
+        ], 1
 
-    monkeypatch.setattr(notion.NotionStore, "recent_performance", fake_recent)
     monkeypatch.setattr(exercisedb, "search_exercises", fake_search)
-
-    recent = await mcp.call_tool("get_recent_lift_performance", {})
-    assert _tool_payload(recent)["lifts"][0]["actual_weight"] == "195"
-
     searched = await mcp.call_tool("search_exercise_videos", {"name": "bench press"})
     assert _tool_payload(searched)["exercises"][0]["demo_url"].endswith("bench.mp4")
-
-
-async def test_mcp_create_goal_and_context(monkeypatch):
-    async def fake_create(self, data):
-        return {"id": "goal-1", **data}
-
-    async def fake_context(self):
-        return {
-            "goals": [{"name": "Bench 225", "target": "225", "status": "Active"}],
-            "locations": [{"name": "Home gym", "is_default": True, "equipment": "barbell"}],
-            "latest_body_stats": {"weight": "185", "bench": "195"},
-            "default_location": {"name": "Home gym", "is_default": True},
-        }
-
-    monkeypatch.setattr(notion.NotionStore, "create_goal", fake_create)
-    monkeypatch.setattr(notion.NotionStore, "planning_context", fake_context)
-
-    created = await mcp.call_tool("create_goal", {"name": "Bench 225", "target": "225"})
-    payload = _tool_payload(created)
-    assert payload["name"] == "Bench 225"
-    assert payload["status"] == "Active"
-
-    context = await mcp.call_tool("get_planning_context", {})
-    assert _tool_payload(context)["latest_body_stats"]["weight"] == "185"
