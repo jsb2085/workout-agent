@@ -15,7 +15,7 @@ from app.models.performance_goal import PerformanceGoal
 from app.models.physic_photo import PhysicPhoto
 from app.models.protein import Protein
 from app.models.steps import Steps
-from app.services import photos, records
+from app.services import exercisedb, photos, records
 
 
 def _parse_dt(value: str) -> datetime:
@@ -476,3 +476,84 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         """Get one body-stats snapshot by id (read-only for the agent)."""
         return await _get(BodyStats, item_id, email, user_id)
+
+    @mcp.tool
+    async def search_exercise_videos(
+        name: str | None = None,
+        body_parts: str | None = None,
+        equipments: str | None = None,
+        target_muscles: str | None = None,
+        exercise_type: str | None = None,
+        keywords: str | None = None,
+        limit: int = 10,
+    ) -> dict[str, Any]:
+        """Search ExerciseDB for workout demonstration videos.
+
+        With EXERCISEDB_API_KEY this uses ExerciseDB V2 and returns MP4 video_url.
+        Without a key it uses the free hosted API and demo_url is an animated GIF.
+        Filter by name, body_parts, equipments, target_muscles, exercise_type, or keywords.
+        """
+        exercises, total = await exercisedb.search_exercises(
+            name=name,
+            body_parts=body_parts,
+            equipments=equipments,
+            target_muscles=target_muscles,
+            exercise_type=exercise_type,
+            keywords=keywords,
+            limit=limit,
+        )
+        return {
+            "source": exercisedb.exercisedb_source(),
+            "total": total,
+            "exercises": [item.model_dump() for item in exercises],
+        }
+
+    @mcp.tool
+    async def get_exercise_video(exercise_id: str) -> dict[str, Any]:
+        """Get one ExerciseDB exercise by id, including video_url or gif_url."""
+        exercise = await exercisedb.get_exercise(exercise_id)
+        return exercise.model_dump()
+
+    @mcp.tool
+    async def get_workout_exercise_videos(
+        email: str | None = None,
+        user_id: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> dict[str, Any]:
+        """Look up ExerciseDB demonstration videos for a user's lifting workouts.
+
+        Matches each workout's lift name to ExerciseDB. demo_url is an MP4 when
+        using V2, or a GIF on the free API. unmatched lists lifts with no match.
+        """
+        async with db_module.SessionLocal() as session:
+            user = await records.resolve_user(session, email=email, user_id=user_id)
+            workouts = await records.list_for_user(
+                session,
+                LiftingWorkout,
+                user.id,
+                date_field="date_todo",
+                date_from=_parse_dt(date_from) if date_from else None,
+                date_to=_parse_dt(date_to) if date_to else None,
+            )
+        videos = await exercisedb.videos_for_lift_names([item.lift for item in workouts])
+        rows = []
+        unmatched: list[str] = []
+        for item in workouts:
+            exercise = videos.get(item.lift)
+            if exercise is None:
+                unmatched.append(item.lift)
+            rows.append(
+                {
+                    "workout_id": str(item.id),
+                    "lift": item.lift,
+                    "query": item.lift,
+                    "workout": records.to_dict(item),
+                    "exercise": exercise.model_dump() if exercise else None,
+                }
+            )
+        return {
+            "source": exercisedb.exercisedb_source(),
+            "workouts": rows,
+            "unmatched": unmatched,
+        }

@@ -54,6 +54,10 @@ services:
       MINIO_BUCKET: physique-photos
       MINIO_SECURE: "false"
       MCP_AGENT_TOKEN: ${MCP_AGENT_TOKEN:-dev-mcp-agent-token}
+      EXERCISEDB_API_KEY: ${EXERCISEDB_API_KEY:-}
+      EXERCISEDB_API_HOST: ${EXERCISEDB_API_HOST:-edb-with-videos-and-images-by-ascendapi.p.rapidapi.com}
+      EXERCISEDB_BASE_URL: ${EXERCISEDB_BASE_URL:-}
+      EXERCISEDB_TIMEOUT_SECONDS: ${EXERCISEDB_TIMEOUT_SECONDS:-15}
       CORS_ORIGINS: "*"
     depends_on:
       db:
