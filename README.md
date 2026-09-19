@@ -2,6 +2,17 @@
 
 Notion is the source of truth. **LangGraph plans the week. The CLI moves data.**
 
+From the repo root, `workout` is a Python file — not a global command until you install the package:
+
+```bash
+python3 -m pip install -e ".[dev]"
+python3 workout --help
+# same thing:
+python3 -m app --help
+```
+
+After install you can also type `workout` if that script directory is on your PATH. If you get `command not found`, use `python3 workout` from this folder.
+
 ## Notion UI (import from this repo)
 
 Do not build the databases by hand. Import them from GitHub:
@@ -10,7 +21,7 @@ Do not build the databases by hand. Import them from GitHub:
 cp .env.example .env
 # NOTION_TOKEN from https://www.notion.so/my-integrations
 # Share any Notion page with that integration, then paste its URL:
-workout setup --parent "https://www.notion.so/your-page-...." --write-env
+python3 workout setup --parent "https://www.notion.so/your-page-...." --write-env
 ```
 
 That creates a **Workout Agent** page with a cover, how-to, section headers, and a colored caption above each of the six inline tables (Goals, Workout Locations, Body Stats, Workout Lifts, Daily Logs, Weekly Workouts). Example rows are seeded so you can edit immediately.
@@ -20,7 +31,7 @@ Prefer Notion's Import UI instead? Download the CSVs in [`notion/csv/`](notion/c
 You add and edit **Goals**, **Workout Locations**, and **Body Stats** in Notion. After you train, log **Actual weight** on Workout Lifts — that is next week's input.
 
 ```
-workout run --week-start 2026-09-21
+python3 workout run --week-start 2026-09-21
 ```
 
 That pulls Notion → runs the coach graph (`gpt-5.6-luna`) → pushes the week back.
@@ -28,9 +39,9 @@ That pulls Notion → runs the coach graph (`gpt-5.6-luna`) → pushes the week 
 You can still split the I/O if you want to inspect the JSON:
 
 ```
-workout pull  > context.json
-workout run --no-push --week-start 2026-09-21
-workout push --plan plan.json
+python3 workout pull  > context.json
+python3 workout run --no-push --week-start 2026-09-21
+python3 workout push --plan plan.json
 ```
 
 ## Graph
@@ -52,10 +63,10 @@ Skipped for now (no Notion fields yet): injury/recovery flags, per-day travel lo
 
 | Command | Direction |
 |---|---|
-| `workout setup --parent PAGE` | Create the Notion page + databases from this repo |
-| `workout run` | Pull → graph → push |
-| `workout pull` | Read goals, locations, body stats, recent lifts/logs |
-| `workout push --plan plan.json` | Write a finished `WeeklyPlan` |
+| `python3 workout setup --parent PAGE` | Create the Notion page + databases from this repo |
+| `python3 workout run` | Pull → graph → push |
+| `python3 workout pull` | Read goals, locations, body stats, recent lifts/logs |
+| `python3 workout push --plan plan.json` | Write a finished `WeeklyPlan` |
 
 Flags on `run` / `push`: `--dry-run`, `--no-videos`. `run` also has `--no-push` to print the plan only. `setup` has `--dry-run`, `--write-env`, `--in-place`, `--no-seed`.
 
@@ -89,13 +100,13 @@ Created by `workout setup` (or CSV import). Share the parent page with your [int
 ## Run
 
 ```bash
+python3 -m pip install -e ".[dev]"
 cp .env.example .env
 # OPENAI_API_KEY, NOTION_TOKEN
 # Share a Notion page with the integration, then:
-workout setup --parent "https://www.notion.so/your-page-...." --write-env
-pip install -e ".[dev]"
-workout run --week-start 2026-09-21 --dry-run
-workout run --week-start 2026-09-21
+python3 workout setup --parent "https://www.notion.so/your-page-...." --write-env
+python3 workout run --week-start 2026-09-21 --dry-run
+python3 workout run --week-start 2026-09-21
 ```
 
 MCP (if a client uses tools instead of the CLI): `uvicorn app.main:app --reload` at `http://localhost:8000/mcp` with `Authorization: Bearer <MCP_AGENT_TOKEN>`.

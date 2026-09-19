@@ -10,12 +10,13 @@ This folder is the Workout Agent UI. Import it into Notion, then share the page 
 4. Copy the page URL and run:
 
 ```bash
-workout setup --parent "https://www.notion.so/your-page-...." --write-env
+python3 -m pip install -e ".[dev]"
+python3 workout setup --parent "https://www.notion.so/your-page-...." --write-env
 ```
 
 That creates a **Workout Agent** child page — cover, how-to, section headers, and a caption above each of the six inline databases — plus example Goals / Location / Body Stats rows, and writes the database ids into `.env`.
 
-Open that page in Notion. New row = New item. You edit **Goals**, **Workout Locations**, and **Body Stats**. After you train, fill **Actual weight** on **Workout Lifts**, then `workout run`.
+Open that page in Notion. New row = New item. You edit **Goals**, **Workout Locations**, and **Body Stats**. After you train, fill **Actual weight** on **Workout Lifts**, then `python3 workout run`.
 
 ## Import the CSVs by hand
 
