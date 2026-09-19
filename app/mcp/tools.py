@@ -253,6 +253,195 @@ def register_tools(mcp: FastMCP) -> None:
         return {"lifts": await store().recent_performance()}
 
     @mcp.tool
+    async def get_planning_context() -> dict[str, Any]:
+        """Active goals, workout locations, and latest body stats from Notion."""
+        return await store().planning_context()
+
+    @mcp.tool
+    async def list_goals() -> list[dict[str, Any]]:
+        """List performance goals from the Notion Goals database."""
+        return await store().list_goals()
+
+    @mcp.tool
+    async def get_goal(item_id: str) -> dict[str, Any]:
+        """Get one Notion goal by page id."""
+        return await store().get_goal(item_id)
+
+    @mcp.tool
+    async def create_goal(
+        name: str,
+        description: str | None = None,
+        target: str | None = None,
+        metric: str | None = None,
+        deadline: str | None = None,
+        status: str = "Active",
+    ) -> dict[str, Any]:
+        """Create a goal in Notion. You can also add rows directly in the Goals database."""
+        return await store().create_goal(
+            {
+                "name": name,
+                "description": description,
+                "target": target,
+                "metric": metric,
+                "deadline": _day(deadline),
+                "status": status,
+            }
+        )
+
+    @mcp.tool
+    async def update_goal(
+        item_id: str,
+        name: str | None = None,
+        description: str | None = None,
+        target: str | None = None,
+        metric: str | None = None,
+        deadline: str | None = None,
+        status: str | None = None,
+    ) -> dict[str, Any]:
+        """Update a Notion goal row, or edit it in the Goals database."""
+        data: dict[str, Any] = {}
+        if name is not None:
+            data["name"] = name
+        if description is not None:
+            data["description"] = description
+        if target is not None:
+            data["target"] = target
+        if metric is not None:
+            data["metric"] = metric
+        if deadline is not None:
+            data["deadline"] = _day(deadline)
+        if status is not None:
+            data["status"] = status
+        return await store().update_goal(item_id, data)
+
+    @mcp.tool
+    async def delete_goal(item_id: str) -> str:
+        """Archive a Notion goal row."""
+        return await store().delete_goal(item_id)
+
+    @mcp.tool
+    async def list_workout_locations() -> list[dict[str, Any]]:
+        """List workout locations from the Notion Workout Locations database."""
+        return await store().list_locations()
+
+    @mcp.tool
+    async def get_workout_location(item_id: str) -> dict[str, Any]:
+        """Get one Notion workout location by page id."""
+        return await store().get_location(item_id)
+
+    @mcp.tool
+    async def create_workout_location(
+        name: str,
+        description: str | None = None,
+        equipment: str | None = None,
+        is_default: bool = False,
+    ) -> dict[str, Any]:
+        """Create a workout location in Notion. You can also add rows in Workout Locations."""
+        return await store().create_location(
+            {
+                "name": name,
+                "description": description,
+                "equipment": equipment,
+                "is_default": is_default,
+            }
+        )
+
+    @mcp.tool
+    async def update_workout_location(
+        item_id: str,
+        name: str | None = None,
+        description: str | None = None,
+        equipment: str | None = None,
+        is_default: bool | None = None,
+    ) -> dict[str, Any]:
+        """Update a Notion workout location, or edit it in Workout Locations."""
+        data: dict[str, Any] = {}
+        if name is not None:
+            data["name"] = name
+        if description is not None:
+            data["description"] = description
+        if equipment is not None:
+            data["equipment"] = equipment
+        if is_default is not None:
+            data["is_default"] = is_default
+        return await store().update_location(item_id, data)
+
+    @mcp.tool
+    async def delete_workout_location(item_id: str) -> str:
+        """Archive a Notion workout location."""
+        return await store().delete_location(item_id)
+
+    @mcp.tool
+    async def list_body_stats(
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """List body-stat check-ins from the Notion Body Stats database."""
+        return await store().list_body_stats(date_from=_day(date_from), date_to=_day(date_to))
+
+    @mcp.tool
+    async def get_body_stats(item_id: str) -> dict[str, Any]:
+        """Get one Notion body-stats row by page id."""
+        return await store().get_body_stats(item_id)
+
+    @mcp.tool
+    async def create_body_stats(
+        height: str,
+        weight: str,
+        date_todo: str,
+        squat: str | None = None,
+        bench: str | None = None,
+        deadlift: str | None = None,
+        overhead_press: str | None = None,
+    ) -> dict[str, Any]:
+        """Add a body-stats check-in in Notion. New row in Body Stats is the UI for this too."""
+        return await store().create_body_stats(
+            {
+                "height": height,
+                "weight": weight,
+                "date": _day(date_todo),
+                "squat": squat,
+                "bench": bench,
+                "deadlift": deadlift,
+                "overhead_press": overhead_press,
+            }
+        )
+
+    @mcp.tool
+    async def update_body_stats(
+        item_id: str,
+        height: str | None = None,
+        weight: str | None = None,
+        date_todo: str | None = None,
+        squat: str | None = None,
+        bench: str | None = None,
+        deadlift: str | None = None,
+        overhead_press: str | None = None,
+    ) -> dict[str, Any]:
+        """Update a Notion body-stats row, or edit it in Body Stats."""
+        data: dict[str, Any] = {}
+        if height is not None:
+            data["height"] = height
+        if weight is not None:
+            data["weight"] = weight
+        if date_todo is not None:
+            data["date"] = _day(date_todo)
+        if squat is not None:
+            data["squat"] = squat
+        if bench is not None:
+            data["bench"] = bench
+        if deadlift is not None:
+            data["deadlift"] = deadlift
+        if overhead_press is not None:
+            data["overhead_press"] = overhead_press
+        return await store().update_body_stats(item_id, data)
+
+    @mcp.tool
+    async def delete_body_stats(item_id: str) -> str:
+        """Archive a Notion body-stats row."""
+        return await store().delete_body_stats(item_id)
+
+    @mcp.tool
     async def search_exercise_videos(
         name: str | None = None,
         body_parts: str | None = None,

@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
-from app.schemas.weekly_plan import PlannedCardio, PlannedDay, PlannedLift, WeeklyPlan
+from app.schemas.weekly_plan import (
+    BodyStatsSnapshot,
+    PlannedCardio,
+    PlannedDay,
+    PlannedGoal,
+    PlannedLift,
+    PlannedLocation,
+    WeeklyPlan,
+)
 from app.services import exercisedb, notion
 
 
@@ -106,6 +114,7 @@ async def assemble_weekly_plan(
         day.protein_goal = row.get("protein_goal")
         day.steps_goal = row.get("steps_goal")
 
+    context = await _planning_context(repo)
     return WeeklyPlan(
         week_start=week_start,
         week_end=end,
@@ -113,7 +122,65 @@ async def assemble_weekly_plan(
         focus=focus,
         notes=notes,
         days=[by_day[key] for key in sorted(by_day)],
+        goals=context["goals"],
+        locations=context["locations"],
+        body_stats=context["body_stats"],
     )
+
+
+async def _optional(repo, name: str, default):
+    method = getattr(repo, name, None)
+    if method is None:
+        return default
+    try:
+        return await method()
+    except notion.NotionError:
+        return default
+
+
+async def _planning_context(repo) -> dict:
+    raw_goals = await _optional(repo, "list_goals", [])
+    raw_locations = await _optional(repo, "list_locations", [])
+    raw_stats = await _optional(repo, "list_body_stats", [])
+    goals = []
+    for row in raw_goals:
+        if (row.get("status") or "Active").casefold() in {"done", "complete", "completed"}:
+            continue
+        if not row.get("name"):
+            continue
+        goals.append(
+            PlannedGoal(
+                name=row["name"],
+                target=row.get("target"),
+                metric=row.get("metric"),
+                deadline=row.get("deadline"),
+                status=row.get("status"),
+                description=row.get("description"),
+            )
+        )
+    locations = [
+        PlannedLocation(
+            name=row.get("name") or "",
+            description=row.get("description"),
+            equipment=row.get("equipment"),
+            is_default=bool(row.get("is_default")),
+        )
+        for row in raw_locations
+        if row.get("name")
+    ]
+    latest = raw_stats[0] if raw_stats else None
+    body_stats = None
+    if latest:
+        body_stats = BodyStatsSnapshot(
+            date=date.fromisoformat(latest["date"][:10]) if latest.get("date") else None,
+            height=latest.get("height"),
+            weight=latest.get("weight"),
+            squat=latest.get("squat"),
+            bench=latest.get("bench"),
+            deadlift=latest.get("deadlift"),
+            overhead_press=latest.get("overhead_press"),
+        )
+    return {"goals": goals, "locations": locations, "body_stats": body_stats}
 
 
 async def attach_videos(plan: WeeklyPlan) -> WeeklyPlan:

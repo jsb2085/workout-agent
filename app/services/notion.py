@@ -35,6 +35,19 @@ RUN_ALIASES = ("Run",)
 WALK_ALIASES = ("Walk",)
 CARDIO_REPS_ALIASES = ("Cardio reps",)
 CARDIO_DONE_ALIASES = ("Cardio completed",)
+DESCRIPTION_ALIASES = ("Description", "Notes", "Details")
+TARGET_ALIASES = ("Target", "Target value")
+METRIC_ALIASES = ("Metric", "Lift", "Category")
+DEADLINE_ALIASES = ("Deadline", "Due", "By")
+GOAL_STATUS_ALIASES = ("Status",)
+EQUIPMENT_ALIASES = ("Equipment", "Gear")
+DEFAULT_ALIASES = ("Default", "Primary")
+HEIGHT_ALIASES = ("Height",)
+BODY_WEIGHT_ALIASES = ("Weight", "Body weight")
+SQUAT_ALIASES = ("Squat",)
+BENCH_ALIASES = ("Bench", "Bench press")
+DEADLIFT_ALIASES = ("Deadlift",)
+OHP_ALIASES = ("Overhead press", "OHP", "Press")
 
 
 class NotionError(Exception):
@@ -114,6 +127,8 @@ def _plain(prop: dict[str, Any] | None) -> str | None:
         return (prop.get("date") or {}).get("start")
     if kind == "select" and prop.get("select"):
         return prop["select"].get("name")
+    if kind == "status" and prop.get("status"):
+        return prop["status"].get("name")
     return None
 
 
@@ -132,6 +147,8 @@ def _write_value(prop_schema: dict[str, Any], value: Any) -> dict[str, Any] | No
             return {"date": None}
         if kind == "select":
             return {"select": None}
+        if kind == "status":
+            return {"status": None}
         return None
     if kind == "title":
         return {"title": [{"type": "text", "text": {"content": str(value)[:2000]}}]}
@@ -152,6 +169,8 @@ def _write_value(prop_schema: dict[str, Any], value: Any) -> dict[str, Any] | No
         return {"date": {"start": str(value)[:10]}}
     if kind == "select":
         return {"select": {"name": str(value)}}
+    if kind == "status":
+        return {"status": {"name": str(value)}}
     return None
 
 
@@ -394,6 +413,141 @@ def build_log_properties(data: dict[str, Any], schema: dict[str, Any] | None = N
     )
 
 
+def default_goal_schema() -> dict[str, Any]:
+    return {
+        "properties": {
+            "Name": {"type": "title"},
+            "Description": {"type": "rich_text"},
+            "Target": {"type": "rich_text"},
+            "Metric": {"type": "rich_text"},
+            "Deadline": {"type": "date"},
+            "Status": {"type": "select"},
+        }
+    }
+
+
+def default_location_schema() -> dict[str, Any]:
+    return {
+        "properties": {
+            "Name": {"type": "title"},
+            "Description": {"type": "rich_text"},
+            "Equipment": {"type": "rich_text"},
+            "Default": {"type": "checkbox"},
+        }
+    }
+
+
+def default_stats_schema() -> dict[str, Any]:
+    return {
+        "properties": {
+            "Name": {"type": "title"},
+            "Date": {"type": "date"},
+            "Height": {"type": "rich_text"},
+            "Weight": {"type": "rich_text"},
+            "Squat": {"type": "rich_text"},
+            "Bench": {"type": "rich_text"},
+            "Deadlift": {"type": "rich_text"},
+            "Overhead press": {"type": "rich_text"},
+        }
+    }
+
+
+def parse_goal_page(page: dict[str, Any], schema: dict[str, Any] | None = None) -> dict[str, Any]:
+    props = page.get("properties") or {}
+    schema = schema or {"properties": {name: {"type": value.get("type")} for name, value in props.items()}}
+    return {
+        "id": page.get("id"),
+        "url": page_url(page),
+        "name": _read(props, schema, TITLE_ALIASES, "title", "rich_text"),
+        "description": _read(props, schema, DESCRIPTION_ALIASES, "rich_text"),
+        "target": _read(props, schema, TARGET_ALIASES, "rich_text", "number"),
+        "metric": _read(props, schema, METRIC_ALIASES, "rich_text", "select"),
+        "deadline": (_read(props, schema, DEADLINE_ALIASES, "date") or "")[:10] or None,
+        "status": _read(props, schema, GOAL_STATUS_ALIASES, "select", "status", "rich_text"),
+    }
+
+
+def parse_location_page(page: dict[str, Any], schema: dict[str, Any] | None = None) -> dict[str, Any]:
+    props = page.get("properties") or {}
+    schema = schema or {"properties": {name: {"type": value.get("type")} for name, value in props.items()}}
+    return {
+        "id": page.get("id"),
+        "url": page_url(page),
+        "name": _read(props, schema, TITLE_ALIASES, "title", "rich_text"),
+        "description": _read(props, schema, DESCRIPTION_ALIASES, "rich_text"),
+        "equipment": _read(props, schema, EQUIPMENT_ALIASES, "rich_text"),
+        "is_default": _as_bool(_read(props, schema, DEFAULT_ALIASES, "checkbox")),
+    }
+
+
+def parse_stats_page(page: dict[str, Any], schema: dict[str, Any] | None = None) -> dict[str, Any]:
+    props = page.get("properties") or {}
+    schema = schema or {"properties": {name: {"type": value.get("type")} for name, value in props.items()}}
+    return {
+        "id": page.get("id"),
+        "url": page_url(page),
+        "name": _read(props, schema, TITLE_ALIASES, "title", "rich_text"),
+        "date": (_read(props, schema, LIFT_DATE_ALIASES, "date") or "")[:10] or None,
+        "height": _read(props, schema, HEIGHT_ALIASES, "rich_text", "number"),
+        "weight": _read(props, schema, BODY_WEIGHT_ALIASES, "rich_text", "number"),
+        "squat": _read(props, schema, SQUAT_ALIASES, "rich_text", "number"),
+        "bench": _read(props, schema, BENCH_ALIASES, "rich_text", "number"),
+        "deadlift": _read(props, schema, DEADLIFT_ALIASES, "rich_text", "number"),
+        "overhead_press": _read(props, schema, OHP_ALIASES, "rich_text", "number"),
+    }
+
+
+def build_goal_properties(data: dict[str, Any], schema: dict[str, Any] | None = None) -> dict[str, Any]:
+    schema = schema or default_goal_schema()
+    return _fill(
+        schema,
+        data,
+        [
+            (TITLE_ALIASES, ("title",), "name"),
+            (DESCRIPTION_ALIASES, ("rich_text",), "description"),
+            (TARGET_ALIASES, ("rich_text", "number"), "target"),
+            (METRIC_ALIASES, ("rich_text", "select"), "metric"),
+            (DEADLINE_ALIASES, ("date",), "deadline"),
+            (GOAL_STATUS_ALIASES, ("select", "status", "rich_text"), "status"),
+        ],
+    )
+
+
+def build_location_properties(data: dict[str, Any], schema: dict[str, Any] | None = None) -> dict[str, Any]:
+    schema = schema or default_location_schema()
+    return _fill(
+        schema,
+        data,
+        [
+            (TITLE_ALIASES, ("title",), "name"),
+            (DESCRIPTION_ALIASES, ("rich_text",), "description"),
+            (EQUIPMENT_ALIASES, ("rich_text",), "equipment"),
+            (DEFAULT_ALIASES, ("checkbox",), "is_default"),
+        ],
+    )
+
+
+def build_stats_properties(data: dict[str, Any], schema: dict[str, Any] | None = None) -> dict[str, Any]:
+    schema = schema or default_stats_schema()
+    payload = dict(data)
+    if "name" not in payload and payload.get("date"):
+        payload["name"] = str(payload.get("date"))
+    return _fill(
+        schema,
+        payload,
+        [
+            (TITLE_ALIASES, ("title",), "name"),
+            (LIFT_DATE_ALIASES, ("date",), "date"),
+            (HEIGHT_ALIASES, ("rich_text", "number"), "height"),
+            (BODY_WEIGHT_ALIASES, ("rich_text", "number"), "weight"),
+            (SQUAT_ALIASES, ("rich_text", "number"), "squat"),
+            (BENCH_ALIASES, ("rich_text", "number"), "bench"),
+            (DEADLIFT_ALIASES, ("rich_text", "number"), "deadlift"),
+            (OHP_ALIASES, ("rich_text", "number"), "overhead_press"),
+        ],
+    )
+
+
 def _in_range(value: str | None, start: str | None, end: str | None) -> bool:
     if not value:
         return False
@@ -526,6 +680,203 @@ class NotionStore:
         await self.client.update_page(item_id, {"archived": True})
         return "deleted"
 
+    def _db_id(self, attr: str, env_name: str) -> str:
+        value = getattr(get_settings(), attr)
+        if not value:
+            raise NotionError(f"{env_name} is not set", 400)
+        return value
+
+    async def _list_db(
+        self,
+        database_id: str,
+        fallback: dict[str, Any],
+        parse,
+        *,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        sort_key: str = "date",
+    ) -> list[dict[str, Any]]:
+        schema = await self.schema(database_id, fallback)
+        pages = await self.client.query_database(database_id)
+        rows = [parse(page, schema) for page in pages]
+        if date_from or date_to:
+            rows = [row for row in rows if _in_range(row.get("date"), date_from, date_to)]
+        rows.sort(key=lambda row: row.get(sort_key) or row.get("name") or "", reverse=True)
+        return rows
+
+    async def _create_db(self, database_id: str, fallback: dict[str, Any], build, parse, data: dict[str, Any]) -> dict[str, Any]:
+        schema = await self.schema(database_id, fallback)
+        page = await self.client.create_page(
+            {"parent": {"database_id": database_id}, "properties": build(data, schema)}
+        )
+        return parse(page, schema)
+
+    async def _update_db(
+        self,
+        item_id: str,
+        database_id: str,
+        fallback: dict[str, Any],
+        build,
+        parse,
+        data: dict[str, Any],
+    ) -> dict[str, Any]:
+        schema = await self.schema(database_id, fallback) if database_id else fallback
+        page = await self.client.update_page(item_id, {"properties": build(data, schema)})
+        return parse(page, schema)
+
+    async def _get_db(self, item_id: str, database_id: str, fallback: dict[str, Any], parse) -> dict[str, Any]:
+        page = await self.client.retrieve_page(item_id)
+        schema = await self.schema(database_id, fallback) if database_id else fallback
+        return parse(page, schema)
+
+    async def list_goals(self) -> list[dict[str, Any]]:
+        return await self._list_db(
+            self._db_id("notion_goals_database_id", "NOTION_GOALS_DATABASE_ID"),
+            default_goal_schema(),
+            parse_goal_page,
+            sort_key="deadline",
+        )
+
+    async def get_goal(self, item_id: str) -> dict[str, Any]:
+        return await self._get_db(
+            item_id,
+            get_settings().notion_goals_database_id,
+            default_goal_schema(),
+            parse_goal_page,
+        )
+
+    async def create_goal(self, data: dict[str, Any]) -> dict[str, Any]:
+        payload = dict(data)
+        payload.setdefault("status", "Active")
+        return await self._create_db(
+            self._db_id("notion_goals_database_id", "NOTION_GOALS_DATABASE_ID"),
+            default_goal_schema(),
+            build_goal_properties,
+            parse_goal_page,
+            payload,
+        )
+
+    async def update_goal(self, item_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        return await self._update_db(
+            item_id,
+            get_settings().notion_goals_database_id,
+            default_goal_schema(),
+            build_goal_properties,
+            parse_goal_page,
+            data,
+        )
+
+    async def delete_goal(self, item_id: str) -> str:
+        await self.client.update_page(item_id, {"archived": True})
+        return "deleted"
+
+    async def list_locations(self) -> list[dict[str, Any]]:
+        rows = await self._list_db(
+            self._db_id("notion_locations_database_id", "NOTION_LOCATIONS_DATABASE_ID"),
+            default_location_schema(),
+            parse_location_page,
+            sort_key="name",
+        )
+        rows.sort(key=lambda row: (not row.get("is_default"), (row.get("name") or "").casefold()))
+        return rows
+
+    async def get_location(self, item_id: str) -> dict[str, Any]:
+        return await self._get_db(
+            item_id,
+            get_settings().notion_locations_database_id,
+            default_location_schema(),
+            parse_location_page,
+        )
+
+    async def create_location(self, data: dict[str, Any]) -> dict[str, Any]:
+        return await self._create_db(
+            self._db_id("notion_locations_database_id", "NOTION_LOCATIONS_DATABASE_ID"),
+            default_location_schema(),
+            build_location_properties,
+            parse_location_page,
+            data,
+        )
+
+    async def update_location(self, item_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        return await self._update_db(
+            item_id,
+            get_settings().notion_locations_database_id,
+            default_location_schema(),
+            build_location_properties,
+            parse_location_page,
+            data,
+        )
+
+    async def delete_location(self, item_id: str) -> str:
+        await self.client.update_page(item_id, {"archived": True})
+        return "deleted"
+
+    async def list_body_stats(self, *, date_from: str | None = None, date_to: str | None = None) -> list[dict[str, Any]]:
+        return await self._list_db(
+            self._db_id("notion_stats_database_id", "NOTION_STATS_DATABASE_ID"),
+            default_stats_schema(),
+            parse_stats_page,
+            date_from=date_from,
+            date_to=date_to,
+        )
+
+    async def get_body_stats(self, item_id: str) -> dict[str, Any]:
+        return await self._get_db(
+            item_id,
+            get_settings().notion_stats_database_id,
+            default_stats_schema(),
+            parse_stats_page,
+        )
+
+    async def create_body_stats(self, data: dict[str, Any]) -> dict[str, Any]:
+        return await self._create_db(
+            self._db_id("notion_stats_database_id", "NOTION_STATS_DATABASE_ID"),
+            default_stats_schema(),
+            build_stats_properties,
+            parse_stats_page,
+            data,
+        )
+
+    async def update_body_stats(self, item_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        return await self._update_db(
+            item_id,
+            get_settings().notion_stats_database_id,
+            default_stats_schema(),
+            build_stats_properties,
+            parse_stats_page,
+            data,
+        )
+
+    async def delete_body_stats(self, item_id: str) -> str:
+        await self.client.update_page(item_id, {"archived": True})
+        return "deleted"
+
+    async def planning_context(self) -> dict[str, Any]:
+        goals: list[dict[str, Any]] = []
+        locations: list[dict[str, Any]] = []
+        stats: list[dict[str, Any]] = []
+        try:
+            goals = await self.list_goals()
+        except NotionError:
+            goals = []
+        try:
+            locations = await self.list_locations()
+        except NotionError:
+            locations = []
+        try:
+            stats = await self.list_body_stats()
+        except NotionError:
+            stats = []
+        active = [row for row in goals if (row.get("status") or "Active").casefold() not in {"done", "complete", "completed"}]
+        default = next((row for row in locations if row.get("is_default")), locations[0] if locations else None)
+        return {
+            "goals": active,
+            "all_goals": goals,
+            "locations": locations,
+            "default_location": default,
+            "latest_body_stats": stats[0] if stats else None,
+        }
+
 
 def _lift_label(lift: PlannedLift) -> str:
     parts = [lift.lift]
@@ -568,12 +919,51 @@ def _day_blocks(day: PlannedDay) -> list[dict[str, Any]]:
     return blocks
 
 
+def _profile_blocks(plan: WeeklyPlan) -> list[dict[str, Any]]:
+    blocks: list[dict[str, Any]] = []
+    if plan.body_stats:
+        stats = plan.body_stats
+        parts = []
+        if stats.weight:
+            parts.append(f"Weight {stats.weight}")
+        if stats.height:
+            parts.append(f"Height {stats.height}")
+        for label, value in (
+            ("Squat", stats.squat),
+            ("Bench", stats.bench),
+            ("Deadlift", stats.deadlift),
+            ("OHP", stats.overhead_press),
+        ):
+            if value:
+                parts.append(f"{label} {value}")
+        if parts:
+            prefix = f"Body stats ({stats.date.isoformat()})" if stats.date else "Body stats"
+            blocks.append(_paragraph(f"{prefix}: " + " · ".join(parts)))
+    if plan.locations:
+        default = next((item for item in plan.locations if item.is_default), plan.locations[0])
+        label = default.name
+        if default.equipment:
+            label = f"{label} ({default.equipment})"
+        blocks.append(_paragraph(f"Location: {label}"))
+    if plan.goals:
+        blocks.append(_heading("Goals", 3))
+        for goal in plan.goals:
+            text = goal.name
+            if goal.target:
+                text = f"{text} — {goal.target}"
+            if goal.deadline:
+                text = f"{text} by {goal.deadline}"
+            blocks.append(_todo(text, checked=(goal.status or "").casefold() in {"done", "complete", "completed"}))
+    return blocks
+
+
 def build_page_children(plan: WeeklyPlan) -> list[dict[str, Any]]:
     blocks: list[dict[str, Any]] = [_heading(plan.title, 1)]
     if plan.focus:
         blocks.append(_callout(plan.focus))
     if plan.notes:
         blocks.append(_paragraph(plan.notes))
+    blocks.extend(_profile_blocks(plan))
     blocks.append(
         _paragraph(
             "Log Actual weight on the Workout Lifts row. That number is what next week’s plan uses.",

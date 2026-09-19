@@ -2,7 +2,15 @@ from datetime import date
 
 from app.cli import main
 from app.mcp.server import mcp
-from app.schemas.weekly_plan import PlannedCardio, PlannedDay, PlannedLift, WeeklyPlan
+from app.schemas.weekly_plan import (
+    BodyStatsSnapshot,
+    PlannedCardio,
+    PlannedDay,
+    PlannedGoal,
+    PlannedLift,
+    PlannedLocation,
+    WeeklyPlan,
+)
 from app.services import exercisedb, notion, weekly_plan as weekly_plan_service
 from tests.test_mcp import _tool_payload
 
@@ -176,6 +184,103 @@ async def test_assemble_week_from_notion_rows(monkeypatch):
     assert monday.lifts[0].demo_url.endswith("bench.mp4")
     assert monday.cardio[0].kind == "walk"
     assert len(plan.days) == 7
+    assert plan.goals == []
+    assert plan.body_stats is None
+
+
+def test_parse_and_build_profile_rows():
+    goal_page = {
+        "id": "g1",
+        "url": "https://www.notion.so/g1",
+        "properties": {
+            "Name": {"type": "title", "title": [{"plain_text": "Bench 225"}]},
+            "Target": {"type": "rich_text", "rich_text": [{"plain_text": "225"}]},
+            "Metric": {"type": "rich_text", "rich_text": [{"plain_text": "bench"}]},
+            "Deadline": {"type": "date", "date": {"start": "2026-12-01"}},
+            "Status": {"type": "select", "select": {"name": "Active"}},
+            "Description": {"type": "rich_text", "rich_text": [{"plain_text": "Touch 225"}]},
+        },
+    }
+    goal = notion.parse_goal_page(goal_page, notion.default_goal_schema())
+    assert goal["name"] == "Bench 225"
+    assert goal["target"] == "225"
+    assert goal["status"] == "Active"
+    built = notion.build_goal_properties({"name": "Bench 225", "target": "225", "status": "Active"})
+    assert built["Name"]["title"][0]["text"]["content"] == "Bench 225"
+    assert built["Status"] == {"select": {"name": "Active"}}
+
+    location = notion.parse_location_page(
+        {
+            "id": "l1",
+            "properties": {
+                "Name": {"type": "title", "title": [{"plain_text": "Home gym"}]},
+                "Equipment": {"type": "rich_text", "rich_text": [{"plain_text": "barbell, rack"}]},
+                "Default": {"type": "checkbox", "checkbox": True},
+            },
+        },
+        notion.default_location_schema(),
+    )
+    assert location["is_default"] is True
+    assert location["equipment"] == "barbell, rack"
+
+    stats = notion.parse_stats_page(
+        {
+            "id": "s1",
+            "properties": {
+                "Name": {"type": "title", "title": [{"plain_text": "2026-09-18"}]},
+                "Date": {"type": "date", "date": {"start": "2026-09-18"}},
+                "Weight": {"type": "rich_text", "rich_text": [{"plain_text": "185"}]},
+                "Bench": {"type": "rich_text", "rich_text": [{"plain_text": "195"}]},
+            },
+        },
+        notion.default_stats_schema(),
+    )
+    assert stats["weight"] == "185"
+    assert stats["bench"] == "195"
+
+
+def test_week_page_includes_goals_location_and_stats():
+    plan = _sample_plan()
+    plan.goals = [PlannedGoal(name="Bench 225", target="225", deadline="2026-12-01", status="Active")]
+    plan.locations = [PlannedLocation(name="Home gym", equipment="barbell", is_default=True)]
+    plan.body_stats = BodyStatsSnapshot(date=date(2026, 9, 18), weight="185", bench="195")
+    children = notion.build_page_children(plan)
+    blob = str(children)
+    assert "Bench 225" in blob
+    assert "225" in blob
+    assert "Home gym" in blob
+    assert "Weight 185" in blob
+
+
+async def test_assemble_week_includes_planning_context(monkeypatch):
+    class FakeStore:
+        async def list_lifts(self, **kwargs):
+            return []
+
+        async def list_logs(self, **kwargs):
+            return []
+
+        async def list_goals(self):
+            return [
+                {"name": "Bench 225", "target": "225", "status": "Active", "deadline": "2026-12-01"},
+                {"name": "Old goal", "status": "Done"},
+            ]
+
+        async def list_locations(self):
+            return [{"name": "Home gym", "equipment": "barbell", "is_default": True}]
+
+        async def list_body_stats(self):
+            return [{"date": "2026-09-18", "weight": "185", "bench": "195"}]
+
+    monkeypatch.setattr(exercisedb, "videos_for_lift_names", lambda names: {})
+    plan = await weekly_plan_service.assemble_weekly_plan(
+        week_start=date(2026, 9, 21),
+        include_videos=False,
+        store=FakeStore(),
+    )
+    assert [goal.name for goal in plan.goals] == ["Bench 225"]
+    assert plan.locations[0].name == "Home gym"
+    assert plan.body_stats.weight == "185"
 
 
 async def test_publish_dry_run(monkeypatch):

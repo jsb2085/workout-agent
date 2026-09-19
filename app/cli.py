@@ -34,6 +34,13 @@ def _parser() -> argparse.ArgumentParser:
     lifts = notion_sub.add_parser("lifts", help="List Notion lift rows")
     lifts.add_argument("--date-from")
     lifts.add_argument("--date-to")
+
+    notion_sub.add_parser("goals", help="List performance goals")
+    notion_sub.add_parser("locations", help="List workout locations")
+    stats = notion_sub.add_parser("stats", help="List body-stat check-ins")
+    stats.add_argument("--date-from")
+    stats.add_argument("--date-to")
+    notion_sub.add_parser("context", help="Goals, locations, and latest body stats")
     return parser
 
 
@@ -71,6 +78,27 @@ async def _lifts(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+async def _goals(_args: argparse.Namespace) -> dict[str, Any]:
+    return {"goals": await notion.NotionStore().list_goals()}
+
+
+async def _locations(_args: argparse.Namespace) -> dict[str, Any]:
+    return {"locations": await notion.NotionStore().list_locations()}
+
+
+async def _stats(args: argparse.Namespace) -> dict[str, Any]:
+    return {
+        "body_stats": await notion.NotionStore().list_body_stats(
+            date_from=args.date_from,
+            date_to=args.date_to,
+        )
+    }
+
+
+async def _context(_args: argparse.Namespace) -> dict[str, Any]:
+    return await notion.NotionStore().planning_context()
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     commands = {
@@ -78,6 +106,10 @@ def main(argv: list[str] | None = None) -> int:
         "publish": _publish_plan,
         "recent": _recent,
         "lifts": _lifts,
+        "goals": _goals,
+        "locations": _locations,
+        "stats": _stats,
+        "context": _context,
     }
     if args.group != "notion" or args.command not in commands:
         raise SystemExit("Unknown command")

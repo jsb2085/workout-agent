@@ -34,6 +34,32 @@ class PlannedDay(BaseModel):
     notes: str | None = None
 
 
+class PlannedGoal(BaseModel):
+    name: str
+    target: str | None = None
+    metric: str | None = None
+    deadline: str | None = None
+    status: str | None = None
+    description: str | None = None
+
+
+class PlannedLocation(BaseModel):
+    name: str
+    description: str | None = None
+    equipment: str | None = None
+    is_default: bool = False
+
+
+class BodyStatsSnapshot(BaseModel):
+    date: date | None = None
+    height: str | None = None
+    weight: str | None = None
+    squat: str | None = None
+    bench: str | None = None
+    deadlift: str | None = None
+    overhead_press: str | None = None
+
+
 class WeeklyPlan(BaseModel):
     week_start: date
     week_end: date
@@ -41,3 +67,6 @@ class WeeklyPlan(BaseModel):
     focus: str | None = None
     notes: str | None = None
     days: list[PlannedDay] = Field(default_factory=list)
+    goals: list[PlannedGoal] = Field(default_factory=list)
+    locations: list[PlannedLocation] = Field(default_factory=list)
+    body_stats: BodyStatsSnapshot | None = None

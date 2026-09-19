@@ -36,6 +36,10 @@ async def test_mcp_write_tools_only_for_allowed_resources():
         prefix = resource.removesuffix("s") if resource.endswith("s") and resource != "steps" else resource
         if resource == "lifting_workouts":
             prefix = "lifting_workout"
+        elif resource == "workout_locations":
+            prefix = "workout_location"
+        elif resource == "body_stats":
+            prefix = "body_stats"
         assert f"create_{prefix}" in names
         assert f"update_{prefix}" in names
         assert f"delete_{prefix}" in names
@@ -45,6 +49,7 @@ async def test_mcp_write_tools_only_for_allowed_resources():
     assert "get_exercise_video" in names
     assert "publish_weekly_workout_to_notion" in names
     assert "get_recent_lift_performance" in names
+    assert "get_planning_context" in names
     assert "create_physic_photo" not in names
     assert "sync_notion_workouts_to_agent" not in names
     assert "resolve_user" not in names
@@ -105,3 +110,27 @@ async def test_mcp_recent_and_search(monkeypatch):
 
     searched = await mcp.call_tool("search_exercise_videos", {"name": "bench press"})
     assert _tool_payload(searched)["exercises"][0]["demo_url"].endswith("bench.mp4")
+
+
+async def test_mcp_create_goal_and_context(monkeypatch):
+    async def fake_create(self, data):
+        return {"id": "goal-1", **data}
+
+    async def fake_context(self):
+        return {
+            "goals": [{"name": "Bench 225", "target": "225", "status": "Active"}],
+            "locations": [{"name": "Home gym", "is_default": True, "equipment": "barbell"}],
+            "latest_body_stats": {"weight": "185", "bench": "195"},
+            "default_location": {"name": "Home gym", "is_default": True},
+        }
+
+    monkeypatch.setattr(notion.NotionStore, "create_goal", fake_create)
+    monkeypatch.setattr(notion.NotionStore, "planning_context", fake_context)
+
+    created = await mcp.call_tool("create_goal", {"name": "Bench 225", "target": "225"})
+    payload = _tool_payload(created)
+    assert payload["name"] == "Bench 225"
+    assert payload["status"] == "Active"
+
+    context = await mcp.call_tool("get_planning_context", {})
+    assert _tool_payload(context)["latest_body_stats"]["weight"] == "185"
