@@ -1,0 +1,188 @@
+{
+  "page_title": "Workout Agent",
+  "page_icon": "🏋️",
+  "page_cover": "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=1800&q=80",
+  "tagline": "Plan the week. Log the work. The graph reads this page.",
+  "intro": [
+    "Add rows in Goals, Workout Locations, and Body Stats. After you lift, fill Actual weight on Workout Lifts. Then run: workout run"
+  ],
+  "how_to": [
+    "Keep Goals, Locations, and Body Stats current — the planner reads those first.",
+    "After you lift, type the real number into Actual weight on that Workout Lifts row.",
+    "Run workout run. The week, with demo videos, lands in Weekly Workouts."
+  ],
+  "sections": {
+    "edit": {
+      "title": "Your inputs",
+      "blurb": "These three tables are the coaching brief. New row = New item."
+    },
+    "planner": {
+      "title": "This week's training",
+      "blurb": "The graph writes these. You only fill Actual weight after you train."
+    }
+  },
+  "databases": [
+    {
+      "key": "goals",
+      "env": "NOTION_GOALS_DATABASE_ID",
+      "title": "Goals",
+      "section": "edit",
+      "description": "You edit this. The planner only uses Active goals.",
+      "hint": "New row = a goal. Leave Status as Active for anything the planner should chase.",
+      "callout_color": "green_background",
+      "icon": "🎯",
+      "csv": "goals.csv",
+      "properties": {
+        "Name": { "title": {} },
+        "Target": { "rich_text": {} },
+        "Metric": { "rich_text": {} },
+        "Deadline": { "date": {} },
+        "Status": {
+          "select": {
+            "options": [
+              { "name": "Active", "color": "green" },
+              { "name": "Paused", "color": "yellow" },
+              { "name": "Done", "color": "gray" }
+            ]
+          }
+        },
+        "Description": { "rich_text": {} }
+      },
+      "seed": [
+        {
+          "Name": "Bench 225",
+          "Target": "225",
+          "Metric": "bench",
+          "Status": "Active",
+          "Description": "Example goal — edit or replace"
+        }
+      ]
+    },
+    {
+      "key": "locations",
+      "env": "NOTION_LOCATIONS_DATABASE_ID",
+      "title": "Workout Locations",
+      "section": "edit",
+      "description": "You edit this. Check Default on the gym the planner should use this week.",
+      "hint": "Check Default on wherever you train this week. Equipment is how the planner picks lifts.",
+      "callout_color": "blue_background",
+      "icon": "📍",
+      "csv": "workout_locations.csv",
+      "properties": {
+        "Name": { "title": {} },
+        "Equipment": { "rich_text": {} },
+        "Default": { "checkbox": {} },
+        "Description": { "rich_text": {} }
+      },
+      "seed": [
+        {
+          "Name": "Home gym",
+          "Equipment": "barbell, rack, dumbbells, bench",
+          "Default": true,
+          "Description": "Example location — set Default on wherever you train"
+        }
+      ]
+    },
+    {
+      "key": "stats",
+      "env": "NOTION_STATS_DATABASE_ID",
+      "title": "Body Stats",
+      "section": "edit",
+      "description": "You edit this. Add a row whenever you weigh in or test a lift.",
+      "hint": "Add a row when you weigh in or test a lift. The latest row is what the planner sees.",
+      "callout_color": "purple_background",
+      "icon": "📏",
+      "csv": "body_stats.csv",
+      "properties": {
+        "Name": { "title": {} },
+        "Date": { "date": {} },
+        "Height": { "rich_text": {} },
+        "Weight": { "rich_text": {} },
+        "Squat": { "rich_text": {} },
+        "Bench": { "rich_text": {} },
+        "Deadlift": { "rich_text": {} },
+        "Overhead press": { "rich_text": {} }
+      },
+      "seed": [
+        {
+          "Name": "2026-09-19",
+          "Date": "2026-09-19",
+          "Weight": "185"
+        }
+      ]
+    },
+    {
+      "key": "lifts",
+      "env": "NOTION_LIFTS_DATABASE_ID",
+      "title": "Workout Lifts",
+      "section": "planner",
+      "description": "The planner writes the week. You fill Actual weight after you train.",
+      "hint": "After each lift, type Actual weight here. That number is next week's starting point.",
+      "callout_color": "orange_background",
+      "icon": "💪",
+      "csv": "workout_lifts.csv",
+      "properties": {
+        "Name": { "title": {} },
+        "Date": { "date": {} },
+        "Goal weight": { "rich_text": {} },
+        "Actual weight": { "rich_text": {} },
+        "Reps": { "number": {} },
+        "Completed": { "checkbox": {} },
+        "Week start": { "date": {} }
+      },
+      "seed": []
+    },
+    {
+      "key": "logs",
+      "env": "NOTION_LOGS_DATABASE_ID",
+      "title": "Daily Logs",
+      "section": "planner",
+      "description": "The planner can write cardio/protein/steps. You can edit any row.",
+      "hint": "Cardio, protein, and steps for the day. Edit freely — the planner will not overwrite Actuals.",
+      "callout_color": "yellow_background",
+      "icon": "📓",
+      "csv": "daily_logs.csv",
+      "properties": {
+        "Name": { "title": {} },
+        "Date": { "date": {} },
+        "Sprint": { "checkbox": {} },
+        "Run": { "checkbox": {} },
+        "Walk": { "checkbox": {} },
+        "Distance": { "rich_text": {} },
+        "Cardio reps": { "number": {} },
+        "Cardio completed": { "checkbox": {} },
+        "Protein goal": { "number": {} },
+        "Protein actual": { "number": {} },
+        "Steps goal": { "number": {} },
+        "Steps actual": { "number": {} }
+      },
+      "seed": []
+    },
+    {
+      "key": "weeks",
+      "env": "NOTION_DATABASE_ID",
+      "title": "Weekly Workouts",
+      "section": "planner",
+      "description": "The planner publishes the readable week page (lifts + demo videos) here.",
+      "hint": "Open the latest week page for the full session list and demo videos under each lift.",
+      "callout_color": "gray_background",
+      "icon": "📅",
+      "csv": "weekly_workouts.csv",
+      "properties": {
+        "Name": { "title": {} },
+        "Week": { "date": {} },
+        "Status": {
+          "select": {
+            "options": [
+              { "name": "Planned", "color": "blue" },
+              { "name": "In progress", "color": "yellow" },
+              { "name": "Done", "color": "green" }
+            ]
+          }
+        },
+        "Focus": { "rich_text": {} }
+      },
+      "seed": []
+    }
+  ]
+}
