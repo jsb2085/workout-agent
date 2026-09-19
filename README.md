@@ -2,6 +2,23 @@
 
 Notion is the source of truth. **LangGraph plans the week. The CLI moves data.**
 
+## Notion UI (import from this repo)
+
+Do not build the databases by hand. Import them from GitHub:
+
+```bash
+cp .env.example .env
+# NOTION_TOKEN from https://www.notion.so/my-integrations
+# Share any Notion page with that integration, then paste its URL:
+workout setup --parent "https://www.notion.so/your-page-...." --write-env
+```
+
+That creates a **Workout Agent** page with six inline tables (Goals, Workout Locations, Body Stats, Workout Lifts, Daily Logs, Weekly Workouts) and example rows you can edit.
+
+Prefer Notion's Import UI instead? Download the CSVs in [`notion/csv/`](notion/csv) and follow [`notion/README.md`](notion/README.md).
+
+You add and edit **Goals**, **Workout Locations**, and **Body Stats** in Notion. After you train, log **Actual weight** on Workout Lifts — that is next week's input.
+
 ```
 workout run --week-start 2026-09-21
 ```
@@ -35,13 +52,12 @@ Skipped for now (no Notion fields yet): injury/recovery flags, per-day travel lo
 
 | Command | Direction |
 |---|---|
+| `workout setup --parent PAGE` | Create the Notion page + databases from this repo |
 | `workout run` | Pull → graph → push |
 | `workout pull` | Read goals, locations, body stats, recent lifts/logs |
 | `workout push --plan plan.json` | Write a finished `WeeklyPlan` |
 
-Flags on `run` / `push`: `--dry-run`, `--no-videos`. `run` also has `--no-push` to print the plan only.
-
-You add and edit **Goals**, **Workout Locations**, and **Body Stats** in Notion. After you train, log **Actual weight** on Workout Lifts — that is next week's input.
+Flags on `run` / `push`: `--dry-run`, `--no-videos`. `run` also has `--no-push` to print the plan only. `setup` has `--dry-run`, `--write-env`, `--in-place`, `--no-seed`.
 
 ## LangGraph contract
 
@@ -55,11 +71,11 @@ You add and edit **Goals**, **Workout Locations**, and **Body Stats** in Notion.
 
 `push` expects a `WeeklyPlan`: `title`, `week_start`, `week_end`, `focus`, `days[]` with `lifts` (`lift`, `reps`, `goal_weight`), optional `cardio` / `protein_goal` / `steps_goal`. Push creates lift rows, upserts that day’s log, and publishes the Weekly Workouts page (ExerciseDB GIF/MP4 under each lift).
 
-MCP: `run_weekly_planner`, `pull_planning_context`, `push_weekly_plan`. Optional ExerciseDB search tools if you want them mid-plan.
+MCP: `setup_notion_workspace`, `run_weekly_planner`, `pull_planning_context`, `push_weekly_plan`. Optional ExerciseDB search tools if you want them mid-plan.
 
-## Notion UI
+## Notion databases
 
-One **Workout Agent** page with six databases, each shared with your [integration](https://www.notion.so/my-integrations).
+Created by `workout setup` (or CSV import). Share the parent page with your [integration](https://www.notion.so/my-integrations).
 
 | Database | Env var | Who edits |
 |---|---|---|
@@ -74,7 +90,9 @@ One **Workout Agent** page with six databases, each shared with your [integratio
 
 ```bash
 cp .env.example .env
-# OPENAI_API_KEY, NOTION_TOKEN, and the six database ids
+# OPENAI_API_KEY, NOTION_TOKEN
+# Share a Notion page with the integration, then:
+workout setup --parent "https://www.notion.so/your-page-...." --write-env
 pip install -e ".[dev]"
 workout run --week-start 2026-09-21 --dry-run
 workout run --week-start 2026-09-21

@@ -254,6 +254,9 @@ class NotionClient:
     async def create_page(self, payload: dict[str, Any]) -> dict[str, Any]:
         return await self.request("POST", "/pages", payload)
 
+    async def create_database(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return await self.request("POST", "/databases", payload)
+
     async def update_page(self, page_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return await self.request("PATCH", f"/pages/{page_id}", payload)
 

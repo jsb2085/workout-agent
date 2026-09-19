@@ -1,2 +1,2 @@
-WRITE_TOOLS = frozenset({"push_weekly_plan", "run_weekly_planner"})
+WRITE_TOOLS = frozenset({"push_weekly_plan", "run_weekly_planner", "setup_notion_workspace"})
 READ_TOOLS = frozenset({"pull_planning_context", "search_exercise_videos", "get_exercise_video"})

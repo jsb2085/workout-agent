@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     notion_stats_database_id: str = ""
     notion_data_source_id: str = ""
     notion_template_id: str = ""
+    notion_parent_page_id: str = ""
     notion_version: str = ""
     notion_timeout_seconds: float = 20.0
     openai_api_key: str = ""

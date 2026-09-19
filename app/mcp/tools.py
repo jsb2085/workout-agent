@@ -8,6 +8,7 @@ from fastmcp import FastMCP
 from app.graph.planner import run_week
 from app.schemas.weekly_plan import WeeklyPlan
 from app.services import exercisedb, weekly_plan as weekly_plan_service
+from app.services.workspace import setup_workspace
 
 
 def register_tools(mcp: FastMCP) -> None:
@@ -51,6 +52,21 @@ def register_tools(mcp: FastMCP) -> None:
             dry_run=dry_run,
             include_videos=include_videos,
             push=push,
+        )
+
+    @mcp.tool
+    async def setup_notion_workspace(
+        parent_page: str,
+        in_place: bool = False,
+        seed: bool = True,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        """Create the Workout Agent Notion page and six databases from this repo's schema."""
+        return await setup_workspace(
+            parent_page,
+            dry_run=dry_run,
+            in_place=in_place,
+            seed=seed,
         )
 
     @mcp.tool
