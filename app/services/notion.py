@@ -76,12 +76,44 @@ def _heading(content: str, level: int = 2) -> dict[str, Any]:
     return {"object": "block", "type": key, key: {"rich_text": _rich(content, bold=True)}}
 
 
-def _callout(content: str) -> dict[str, Any]:
+def _callout(content: str, *, emoji: str = "🎯", color: str = "default") -> dict[str, Any]:
     return {
         "object": "block",
         "type": "callout",
-        "callout": {"rich_text": _rich(content), "icon": {"type": "emoji", "emoji": "🎯"}},
+        "callout": {
+            "rich_text": _rich(content),
+            "icon": {"type": "emoji", "emoji": emoji},
+            "color": color,
+        },
     }
+
+
+def _quote(content: str) -> dict[str, Any]:
+    return {"object": "block", "type": "quote", "quote": {"rich_text": _rich(content, italic=True)}}
+
+
+def _divider() -> dict[str, Any]:
+    return {"object": "block", "type": "divider", "divider": {}}
+
+
+def _bulleted(content: str) -> dict[str, Any]:
+    return {
+        "object": "block",
+        "type": "bulleted_list_item",
+        "bulleted_list_item": {"rich_text": _rich(content)},
+    }
+
+
+def _toggle(title: str, children: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "object": "block",
+        "type": "toggle",
+        "toggle": {"rich_text": _rich(title, bold=True), "children": children},
+    }
+
+
+def _toc() -> dict[str, Any]:
+    return {"object": "block", "type": "table_of_contents", "table_of_contents": {"color": "gray"}}
 
 
 def _todo(content: str, *, checked: bool = False) -> dict[str, Any]:

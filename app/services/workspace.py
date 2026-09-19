@@ -7,7 +7,19 @@ from pathlib import Path
 from typing import Any
 
 from app.notion_import import load_schema
-from app.services.notion import NotionClient, NotionError, _callout, _heading, _paragraph, page_url
+from app.services.notion import (
+    NotionClient,
+    NotionError,
+    _bulleted,
+    _callout,
+    _divider,
+    _heading,
+    _paragraph,
+    _quote,
+    _toc,
+    _toggle,
+    page_url,
+)
 
 ENV_KEYS = (
     "NOTION_DATABASE_ID",
@@ -70,21 +82,57 @@ def database_payload(database: dict[str, Any], parent_id: str) -> dict[str, Any]
     return payload
 
 
+def hub_intro_blocks(schema: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    spec = schema or load_schema()
+    sections = spec.get("sections") or {}
+    edit = sections.get("edit") or {}
+    how_to = spec.get("how_to") or spec.get("intro") or []
+    return [
+        _quote(spec.get("tagline") or spec["intro"][0]),
+        _callout(spec["intro"][0], emoji="🏋️", color="blue_background"),
+        _toc(),
+        _toggle("How this page works", [_bulleted(step) for step in how_to]),
+        _callout("Goals — keep Status Active", emoji="🎯", color="green_background"),
+        _callout("Location — one Default gym", emoji="📍", color="blue_background"),
+        _callout("Body stats — latest row wins", emoji="📏", color="purple_background"),
+        _divider(),
+        _heading(edit.get("title") or "Your inputs", 2),
+        _paragraph(edit.get("blurb") or "These tables are the coaching brief.", italic=True),
+    ]
+
+
+def section_intro_blocks(section: str, schema: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    spec = schema or load_schema()
+    meta = (spec.get("sections") or {}).get(section) or {}
+    return [
+        _divider(),
+        _heading(meta.get("title") or section.title(), 2),
+        _paragraph(meta.get("blurb") or "", italic=True),
+    ]
+
+
+def database_frame_blocks(database: dict[str, Any]) -> list[dict[str, Any]]:
+    icon = database.get("icon") or "•"
+    title = f"{icon} {database['title']}"
+    hint = database.get("hint") or database.get("description") or ""
+    color = database.get("callout_color") or "gray_background"
+    blocks = [_heading(title, 3)]
+    if hint:
+        blocks.append(_callout(hint, emoji=icon, color=color))
+    return blocks
+
+
 def hub_page_payload(parent_id: str, schema: dict[str, Any] | None = None) -> dict[str, Any]:
     spec = schema or load_schema()
-    children = [
-        _heading(spec["page_title"], 1),
-        _callout(spec["intro"][0]),
-        _paragraph("New row in a table = New item in Notion. Share this page with your integration once."),
-        _heading("You edit these", 2),
-    ]
     payload: dict[str, Any] = {
         "parent": {"type": "page_id", "page_id": parent_id},
         "properties": {"title": {"title": _rich(spec["page_title"])}},
-        "children": children,
+        "children": hub_intro_blocks(spec),
     }
     if spec.get("page_icon"):
         payload["icon"] = {"type": "emoji", "emoji": spec["page_icon"]}
+    if spec.get("page_cover"):
+        payload["cover"] = {"type": "external", "external": {"url": spec["page_cover"]}}
     return payload
 
 
@@ -185,15 +233,22 @@ async def setup_workspace(
 
     env_ids["NOTION_PARENT_PAGE_ID"] = hub_id
     databases: list[dict[str, Any]] = []
-    planner_heading_added = False
+    layout: list[dict[str, Any]] = [{"kind": "intro", "blocks": hub_intro_blocks(spec)}]
+    current_section = "edit"
     for database in spec["databases"]:
-        if database.get("section") == "planner" and not planner_heading_added:
-            if dry_run:
-                planner_heading_added = True
-            else:
+        section = database.get("section") or "edit"
+        if section != current_section:
+            section_blocks = section_intro_blocks(section, spec)
+            layout.append({"kind": "section", "section": section, "blocks": section_blocks})
+            if not dry_run:
                 assert notion is not None
-                await notion.append_children(hub_id, [_heading("The planner writes these", 2)])
-                planner_heading_added = True
+                await notion.append_children(hub_id, section_blocks)
+            current_section = section
+        frame = database_frame_blocks(database)
+        layout.append({"kind": "frame", "title": database["title"], "blocks": frame})
+        if not dry_run:
+            assert notion is not None
+            await notion.append_children(hub_id, frame)
         payload = database_payload(database, hub_id)
         if dry_run:
             db_id = f"dry-run-{database['key']}"
@@ -219,7 +274,21 @@ async def setup_workspace(
         env_ids[database["env"]] = db_id
         databases.append(record)
 
+    footer = [
+        _divider(),
+        _callout("When the week is logged, run: workout run", emoji="▶️", color="blue_background"),
+    ]
+    layout.append({"kind": "footer", "blocks": footer})
+    if not dry_run:
+        assert notion is not None
+        await notion.append_children(hub_id, footer)
+
     created["databases"] = databases
+    created["layout"] = [
+        {key: value for key, value in item.items() if key != "blocks"}
+        | {"block_types": [block["type"] for block in item.get("blocks") or []]}
+        for item in layout
+    ]
     created["env"] = env_snippet(env_ids)
     created["env_ids"] = env_ids
     created["csv_files"] = [item["csv"] for item in spec["databases"]]

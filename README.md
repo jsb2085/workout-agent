@@ -13,7 +13,7 @@ cp .env.example .env
 workout setup --parent "https://www.notion.so/your-page-...." --write-env
 ```
 
-That creates a **Workout Agent** page with six inline tables (Goals, Workout Locations, Body Stats, Workout Lifts, Daily Logs, Weekly Workouts) and example rows you can edit.
+That creates a **Workout Agent** page with a cover, how-to, section headers, and a colored caption above each of the six inline tables (Goals, Workout Locations, Body Stats, Workout Lifts, Daily Logs, Weekly Workouts). Example rows are seeded so you can edit immediately.
 
 Prefer Notion's Import UI instead? Download the CSVs in [`notion/csv/`](notion/csv) and follow [`notion/README.md`](notion/README.md).
 

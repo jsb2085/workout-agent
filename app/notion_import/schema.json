@@ -1,9 +1,26 @@
 {
   "page_title": "Workout Agent",
   "page_icon": "🏋️",
+  "page_cover": "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=1800&q=80",
+  "tagline": "Plan the week. Log the work. The graph reads this page.",
   "intro": [
     "Add rows in Goals, Workout Locations, and Body Stats. After you lift, fill Actual weight on Workout Lifts. Then run: workout run"
   ],
+  "how_to": [
+    "Keep Goals, Locations, and Body Stats current — the planner reads those first.",
+    "After you lift, type the real number into Actual weight on that Workout Lifts row.",
+    "Run workout run. The week, with demo videos, lands in Weekly Workouts."
+  ],
+  "sections": {
+    "edit": {
+      "title": "Your inputs",
+      "blurb": "These three tables are the coaching brief. New row = New item."
+    },
+    "planner": {
+      "title": "This week's training",
+      "blurb": "The graph writes these. You only fill Actual weight after you train."
+    }
+  },
   "databases": [
     {
       "key": "goals",
@@ -11,6 +28,8 @@
       "title": "Goals",
       "section": "edit",
       "description": "You edit this. The planner only uses Active goals.",
+      "hint": "New row = a goal. Leave Status as Active for anything the planner should chase.",
+      "callout_color": "green_background",
       "icon": "🎯",
       "csv": "goals.csv",
       "properties": {
@@ -45,6 +64,8 @@
       "title": "Workout Locations",
       "section": "edit",
       "description": "You edit this. Check Default on the gym the planner should use this week.",
+      "hint": "Check Default on wherever you train this week. Equipment is how the planner picks lifts.",
+      "callout_color": "blue_background",
       "icon": "📍",
       "csv": "workout_locations.csv",
       "properties": {
@@ -68,6 +89,8 @@
       "title": "Body Stats",
       "section": "edit",
       "description": "You edit this. Add a row whenever you weigh in or test a lift.",
+      "hint": "Add a row when you weigh in or test a lift. The latest row is what the planner sees.",
+      "callout_color": "purple_background",
       "icon": "📏",
       "csv": "body_stats.csv",
       "properties": {
@@ -94,6 +117,8 @@
       "title": "Workout Lifts",
       "section": "planner",
       "description": "The planner writes the week. You fill Actual weight after you train.",
+      "hint": "After each lift, type Actual weight here. That number is next week's starting point.",
+      "callout_color": "orange_background",
       "icon": "💪",
       "csv": "workout_lifts.csv",
       "properties": {
@@ -113,6 +138,8 @@
       "title": "Daily Logs",
       "section": "planner",
       "description": "The planner can write cardio/protein/steps. You can edit any row.",
+      "hint": "Cardio, protein, and steps for the day. Edit freely — the planner will not overwrite Actuals.",
+      "callout_color": "yellow_background",
       "icon": "📓",
       "csv": "daily_logs.csv",
       "properties": {
@@ -137,6 +164,8 @@
       "title": "Weekly Workouts",
       "section": "planner",
       "description": "The planner publishes the readable week page (lifts + demo videos) here.",
+      "hint": "Open the latest week page for the full session list and demo videos under each lift.",
+      "callout_color": "gray_background",
       "icon": "📅",
       "csv": "weekly_workouts.csv",
       "properties": {

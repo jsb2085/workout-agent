@@ -6,7 +6,9 @@ from app.notion_import import load_schema
 from app.services.notion import NotionError
 from app.services.workspace import (
     csv_text,
+    database_frame_blocks,
     database_payload,
+    hub_page_payload,
     parse_page_id,
     seed_properties,
     setup_workspace,
@@ -64,6 +66,31 @@ def test_database_payload_is_inline():
     assert payload["properties"]["Status"]["select"]["options"][0]["name"] == "Active"
 
 
+def test_hub_page_is_a_dashboard_around_the_tables():
+    payload = hub_page_payload("264b5d28-04f5-81a3-b8d4-c9f6e1a2b3c4")
+    types = [block["type"] for block in payload["children"]]
+    assert payload["icon"]["emoji"] == "🏋️"
+    assert payload["cover"]["external"]["url"].startswith("https://images.unsplash.com/")
+    assert types == [
+        "quote",
+        "callout",
+        "table_of_contents",
+        "toggle",
+        "callout",
+        "callout",
+        "callout",
+        "divider",
+        "heading_2",
+        "paragraph",
+    ]
+    assert payload["children"][3]["toggle"]["children"][0]["type"] == "bulleted_list_item"
+    goals = load_schema()["databases"][0]
+    frame = database_frame_blocks(goals)
+    assert frame[0]["type"] == "heading_3"
+    assert "Goals" in frame[0]["heading_3"]["rich_text"][0]["text"]["content"]
+    assert frame[1]["callout"]["color"] == "green_background"
+
+
 def test_seed_properties_types():
     spec = load_schema()
     location = next(item for item in spec["databases"] if item["key"] == "locations")
@@ -78,6 +105,12 @@ async def test_setup_dry_run_does_not_call_notion():
     assert len(result["databases"]) == 6
     assert "NOTION_GOALS_DATABASE_ID=dry-run-goals" in result["env"]
     assert result["databases"][0]["payload"]["is_inline"] is True
+    kinds = [item["kind"] for item in result["layout"]]
+    assert kinds[0] == "intro"
+    assert kinds.count("frame") == 6
+    assert "section" in kinds
+    assert kinds[-1] == "footer"
+    assert "quote" in result["hub"]["payload"]["children"][0]["type"]
 
 
 async def test_setup_creates_hub_databases_and_seed_rows():
