@@ -42,6 +42,56 @@ def parse_page_id(value: str) -> str:
     return f"{compact[0:8]}-{compact[8:12]}-{compact[12:16]}-{compact[16:20]}-{compact[20:32]}"
 
 
+def is_share_error(message: str) -> bool:
+    text = (message or "").casefold()
+    return "could not find page" in text or "shared with your integration" in text
+
+
+def page_title(page: dict[str, Any]) -> str:
+    for prop in (page.get("properties") or {}).values():
+        if not isinstance(prop, dict) or prop.get("type") != "title":
+            continue
+        parts = prop.get("title") or []
+        text = "".join(str(part.get("plain_text") or part.get("text", {}).get("content") or "") for part in parts)
+        if text.strip():
+            return text.strip()
+    return page.get("id") or "Untitled"
+
+
+def share_error_message(parent_id: str, original: str, pages: list[dict[str, Any]] | None = None) -> str:
+    lines = [
+        original.rstrip("."),
+        "",
+        "The Workout Agent integration cannot see that page yet. Notion hides every page until you invite the integration.",
+        "",
+        "1. Open the parent page in Notion (the URL you passed to --parent).",
+        "2. Click Share (top right) → Invite → select the integration named Workout Agent.",
+        "3. Give it Can edit, then run the same command again.",
+        "",
+        f"Parsed page id: {parent_id}",
+        "Pass any existing page you shared. setup creates a Workout Agent child under it.",
+        "If this URL is already the page you want filled, add --in-place after sharing it.",
+    ]
+    if pages:
+        lines.append("")
+        lines.append("Pages this integration can already see:")
+        for page in pages:
+            title = page_title(page)
+            url = page_url(page) or page.get("id")
+            lines.append(f"- {title}  {url}")
+    else:
+        lines.append("")
+        lines.append("This integration cannot see any pages yet. Share one page, then rerun setup with that page's URL.")
+    return "\n".join(lines)
+
+
+async def accessible_pages(client: NotionClient) -> list[dict[str, Any]]:
+    try:
+        return await client.search_pages()
+    except NotionError:
+        return []
+
+
 def property_names(database: dict[str, Any]) -> list[str]:
     return list((database.get("properties") or {}).keys())
 
@@ -208,6 +258,16 @@ async def setup_workspace(
     notion = None if dry_run else (client or NotionClient())
     created: dict[str, Any] = {}
     env_ids: dict[str, str] = {}
+
+    if not dry_run:
+        assert notion is not None
+        try:
+            await notion.retrieve_page(parent_id)
+        except NotionError as exc:
+            if is_share_error(str(exc)):
+                pages = await accessible_pages(notion)
+                raise NotionError(share_error_message(parent_id, str(exc), pages), exc.status_code) from exc
+            raise
 
     if in_place:
         hub_id = parent_id

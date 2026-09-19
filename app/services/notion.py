@@ -312,6 +312,18 @@ class NotionClient:
                 return results
             cursor = page.get("next_cursor")
 
+    async def search_pages(self, *, page_size: int = 10) -> list[dict[str, Any]]:
+        body = await self.request(
+            "POST",
+            "/search",
+            {
+                "page_size": page_size,
+                "filter": {"value": "page", "property": "object"},
+                "sort": {"direction": "descending", "timestamp": "last_edited_time"},
+            },
+        )
+        return list((body or {}).get("results") or [])
+
 
 def default_lift_schema() -> dict[str, Any]:
     return {

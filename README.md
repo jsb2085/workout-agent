@@ -20,7 +20,7 @@ Do not build the databases by hand. Import them from GitHub:
 ```bash
 cp .env.example .env
 # NOTION_TOKEN from https://www.notion.so/my-integrations
-# Share any Notion page with that integration, then paste its URL:
+# Share any Notion page with that integration (Share → Invite → Workout Agent), then paste its URL:
 python3 workout setup --parent "https://www.notion.so/your-page-...." --write-env
 ```
 

@@ -6,8 +6,8 @@ This folder is the Workout Agent UI. Import it into Notion, then share the page 
 
 1. Create an internal integration: https://www.notion.so/my-integrations
 2. Copy the token into `.env` as `NOTION_TOKEN`
-3. In Notion, make any page (or use an existing one) and **Share → Invite** that integration
-4. Copy the page URL and run:
+3. In Notion, make any page (or use an existing one) and **Share → Invite** the integration named **Workout Agent** (Can edit).
+4. Copy that page URL and run:
 
 ```bash
 python3 -m pip install -e ".[dev]"

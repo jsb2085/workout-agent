@@ -6,9 +6,9 @@ import json
 import sys
 from typing import Any
 
-from app.graph.planner import run_week
 from app.schemas.weekly_plan import WeeklyPlan
 from app.services import weekly_plan as weekly_plan_service
+from app.services.notion import NotionError
 from app.services.workspace import setup_workspace
 
 
@@ -71,6 +71,8 @@ async def _push(args: argparse.Namespace) -> dict[str, Any]:
 
 
 async def _run(args: argparse.Namespace) -> dict[str, Any]:
+    from app.graph.planner import run_week
+
     return await run_week(
         week_start=args.week_start,
         week_end=args.week_end,
@@ -98,7 +100,11 @@ async def _setup(args: argparse.Namespace) -> dict[str, Any]:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     commands = {"pull": _pull, "push": _push, "run": _run, "setup": _setup}
-    result = asyncio.run(commands[args.command](args))
+    try:
+        result = asyncio.run(commands[args.command](args))
+    except NotionError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     print(json.dumps(result, indent=2, default=str))
     return 0
 
