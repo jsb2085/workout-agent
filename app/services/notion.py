@@ -18,7 +18,6 @@ TITLE_ALIASES = ("Name", "Title", "Week name", "Lift", "Exercise")
 WEEK_ALIASES = ("Week", "Week of", "Dates")
 STATUS_ALIASES = ("Status",)
 FOCUS_ALIASES = ("Focus", "Goal")
-ATHLETE_ALIASES = ("Athlete", "Person", "Who")
 LIFT_DATE_ALIASES = ("Date",)
 GOAL_WEIGHT_ALIASES = ("Goal weight", "Goal", "Planned weight")
 ACTUAL_WEIGHT_ALIASES = ("Actual weight", "Actual", "Weight")
@@ -183,14 +182,6 @@ def _as_int(value: str | None) -> int | None:
         return None
 
 
-def _require_athlete(athlete: str | None) -> str:
-    settings = get_settings()
-    name = (athlete or settings.notion_default_athlete or "").strip()
-    if not name:
-        raise NotionError("Provide athlete or set NOTION_DEFAULT_ATHLETE", 400)
-    return name
-
-
 def page_url(page: dict[str, Any]) -> str:
     return str(page.get("url") or "")
 
@@ -277,7 +268,6 @@ def default_lift_schema() -> dict[str, Any]:
             "Actual weight": {"type": "rich_text"},
             "Reps": {"type": "number"},
             "Completed": {"type": "checkbox"},
-            "Athlete": {"type": "rich_text"},
             "Week start": {"type": "date"},
         }
     }
@@ -288,7 +278,6 @@ def default_log_schema() -> dict[str, Any]:
         "properties": {
             "Name": {"type": "title"},
             "Date": {"type": "date"},
-            "Athlete": {"type": "rich_text"},
             "Sprint": {"type": "checkbox"},
             "Run": {"type": "checkbox"},
             "Walk": {"type": "checkbox"},
@@ -315,7 +304,6 @@ def parse_lift_page(page: dict[str, Any], schema: dict[str, Any] | None = None) 
         "actual_weight": _read(props, schema, ACTUAL_WEIGHT_ALIASES, "rich_text", "number"),
         "reps": _as_int(_read(props, schema, REPS_ALIASES, "number", "rich_text")),
         "completed": _as_bool(_read(props, schema, COMPLETED_ALIASES, "checkbox")),
-        "athlete": _read(props, schema, ATHLETE_ALIASES, "rich_text"),
         "week_start": (_read(props, schema, WEEK_START_ALIASES, "date") or "")[:10] or None,
     }
 
@@ -331,7 +319,6 @@ def parse_log_page(page: dict[str, Any], schema: dict[str, Any] | None = None) -
         "id": page.get("id"),
         "url": page_url(page),
         "date": (_read(props, schema, LIFT_DATE_ALIASES, "date") or "")[:10] or None,
-        "athlete": _read(props, schema, ATHLETE_ALIASES, "rich_text"),
         "sprint": sprint,
         "run": run,
         "walk": walk,
@@ -377,7 +364,6 @@ def build_lift_properties(data: dict[str, Any], schema: dict[str, Any] | None = 
             (ACTUAL_WEIGHT_ALIASES, ("rich_text", "number"), "actual_weight"),
             (REPS_ALIASES, ("number", "rich_text"), "reps"),
             (COMPLETED_ALIASES, ("checkbox",), "completed"),
-            (ATHLETE_ALIASES, ("rich_text",), "athlete"),
             (WEEK_START_ALIASES, ("date",), "week_start"),
         ],
     )
@@ -386,15 +372,14 @@ def build_lift_properties(data: dict[str, Any], schema: dict[str, Any] | None = 
 def build_log_properties(data: dict[str, Any], schema: dict[str, Any] | None = None) -> dict[str, Any]:
     schema = schema or default_log_schema()
     payload = dict(data)
-    if "name" not in payload and (payload.get("date") or payload.get("athlete")):
-        payload["name"] = f"{payload.get('date') or ''} {payload.get('athlete') or ''}".strip()
+    if "name" not in payload and payload.get("date"):
+        payload["name"] = str(payload.get("date"))
     return _fill(
         schema,
         payload,
         [
             (TITLE_ALIASES, ("title",), "name"),
             (LIFT_DATE_ALIASES, ("date",), "date"),
-            (ATHLETE_ALIASES, ("rich_text",), "athlete"),
             (SPRINT_ALIASES, ("checkbox",), "sprint"),
             (RUN_ALIASES, ("checkbox",), "run"),
             (WALK_ALIASES, ("checkbox",), "walk"),
@@ -438,7 +423,6 @@ class NotionStore:
     async def list_lifts(
         self,
         *,
-        athlete: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
     ) -> list[dict[str, Any]]:
@@ -447,10 +431,7 @@ class NotionStore:
             raise NotionError("NOTION_LIFTS_DATABASE_ID is not set", 400)
         schema = await self.schema(settings.notion_lifts_database_id, default_lift_schema())
         pages = await self.client.query_database(settings.notion_lifts_database_id)
-        who = _require_athlete(athlete) if athlete or settings.notion_default_athlete else None
         rows = [parse_lift_page(page, schema) for page in pages]
-        if who:
-            rows = [row for row in rows if (row.get("athlete") or "").casefold() == who.casefold()]
         if date_from or date_to:
             rows = [row for row in rows if _in_range(row.get("date"), date_from, date_to)]
         rows.sort(key=lambda row: row.get("date") or "", reverse=True)
@@ -469,7 +450,6 @@ class NotionStore:
         if not settings.notion_lifts_database_id:
             raise NotionError("NOTION_LIFTS_DATABASE_ID is not set", 400)
         payload = dict(data)
-        payload["athlete"] = _require_athlete(payload.get("athlete"))
         schema = await self.schema(settings.notion_lifts_database_id, default_lift_schema())
         page = await self.client.create_page(
             {
@@ -491,8 +471,8 @@ class NotionStore:
         await self.client.update_page(item_id, {"archived": True})
         return "deleted"
 
-    async def recent_performance(self, athlete: str | None = None) -> list[dict[str, Any]]:
-        rows = await self.list_lifts(athlete=athlete)
+    async def recent_performance(self) -> list[dict[str, Any]]:
+        rows = await self.list_lifts()
         latest: dict[str, dict[str, Any]] = {}
         for row in rows:
             key = (row.get("lift") or "").casefold()
@@ -504,7 +484,6 @@ class NotionStore:
     async def list_logs(
         self,
         *,
-        athlete: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
     ) -> list[dict[str, Any]]:
@@ -513,10 +492,7 @@ class NotionStore:
             raise NotionError("NOTION_LOGS_DATABASE_ID is not set", 400)
         schema = await self.schema(settings.notion_logs_database_id, default_log_schema())
         pages = await self.client.query_database(settings.notion_logs_database_id)
-        who = _require_athlete(athlete) if athlete or settings.notion_default_athlete else None
         rows = [parse_log_page(page, schema) for page in pages]
-        if who:
-            rows = [row for row in rows if (row.get("athlete") or "").casefold() == who.casefold()]
         if date_from or date_to:
             rows = [row for row in rows if _in_range(row.get("date"), date_from, date_to)]
         rows.sort(key=lambda row: row.get("date") or "", reverse=True)
@@ -527,9 +503,8 @@ class NotionStore:
         if not settings.notion_logs_database_id:
             raise NotionError("NOTION_LOGS_DATABASE_ID is not set", 400)
         payload = dict(data)
-        payload["athlete"] = _require_athlete(payload.get("athlete"))
         schema = await self.schema(settings.notion_logs_database_id, default_log_schema())
-        existing = await self.list_logs(athlete=payload["athlete"], date_from=payload.get("date"), date_to=payload.get("date"))
+        existing = await self.list_logs(date_from=payload.get("date"), date_to=payload.get("date"))
         properties = build_log_properties(payload, schema)
         if existing and existing[0].get("id"):
             page = await self.client.update_page(existing[0]["id"], {"properties": properties})
@@ -618,13 +593,11 @@ def build_week_properties(plan: WeeklyPlan, schema: dict[str, Any] | None = None
             "title": plan.title,
             "status": "Planned",
             "focus": plan.focus,
-            "athlete": plan.athlete,
         },
         [
             (TITLE_ALIASES, ("title",), "title"),
             (STATUS_ALIASES, ("select", "status"), "status"),
             (FOCUS_ALIASES, ("rich_text",), "focus"),
-            (ATHLETE_ALIASES, ("rich_text",), "athlete"),
         ],
     )
     week_name = _find_property(schema, WEEK_ALIASES, "date")

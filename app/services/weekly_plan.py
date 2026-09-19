@@ -25,19 +25,14 @@ def week_end_for(week_start: date, week_end: str | None = None) -> date:
     return week_start + timedelta(days=6)
 
 
-def default_title(week_start: date, week_end: date, athlete: str | None = None) -> str:
+def default_title(week_start: date, week_end: date) -> str:
     if week_start.month == week_end.month:
-        label = f"Week of {week_start:%b} {week_start.day}–{week_end.day}"
-    else:
-        label = f"Week of {week_start:%b} {week_start.day}–{week_end:%b} {week_end.day}"
-    if athlete:
-        return f"{athlete} — {label}"
-    return label
+        return f"Week of {week_start:%b} {week_start.day}–{week_end.day}"
+    return f"Week of {week_start:%b} {week_start.day}–{week_end:%b} {week_end.day}"
 
 
 async def assemble_weekly_plan(
     *,
-    athlete: str,
     week_start: date,
     week_end: date | None = None,
     focus: str | None = None,
@@ -49,14 +44,12 @@ async def assemble_weekly_plan(
     end = week_end or week_end_for(week_start)
     repo = store or notion.NotionStore()
     lifts = await repo.list_lifts(
-        athlete=athlete,
         date_from=week_start.isoformat(),
         date_to=end.isoformat(),
     )
     logs: list[dict] = []
     try:
         logs = await repo.list_logs(
-            athlete=athlete,
             date_from=week_start.isoformat(),
             date_to=end.isoformat(),
         )
@@ -116,9 +109,8 @@ async def assemble_weekly_plan(
     return WeeklyPlan(
         week_start=week_start,
         week_end=end,
-        title=title or default_title(week_start, end, athlete),
+        title=title or default_title(week_start, end),
         focus=focus,
-        athlete=athlete,
         notes=notes,
         days=[by_day[key] for key in sorted(by_day)],
     )

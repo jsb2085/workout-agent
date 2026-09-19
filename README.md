@@ -1,6 +1,6 @@
 # Workout Agent
 
-A LangChain-ready MCP server and CLI. **Notion is the source of truth** for workouts. ExerciseDB supplies demonstration videos. There is no hosted workout database and no physique-photo store.
+A LangChain-ready MCP server and CLI. **Notion is the source of truth** for workouts. ExerciseDB supplies demonstration videos. There is no hosted workout database, no physique-photo store, and no per-user scope — one Notion workspace is the whole dataset.
 
 ## What lives where
 
@@ -28,16 +28,15 @@ Create an [internal integration](https://www.notion.so/my-integrations) and shar
 | **Actual weight** | Text | **You, after the set** |
 | Reps | Number | Agent |
 | Completed | Checkbox | You |
-| Athlete | Text | Agent (`Jacob` / your wife’s name) |
 | Week start | Date | Agent |
 
 ### Daily Logs (`NOTION_LOGS_DATABASE_ID`)
 
-One row per athlete per day: Sprint / Run / Walk, Distance, Cardio reps, Cardio completed, Protein goal / actual, Steps goal / actual, Date, Athlete.
+One row per day: Sprint / Run / Walk, Distance, Cardio reps, Cardio completed, Protein goal / actual, Steps goal / actual, Date.
 
 ### Weekly Workouts (`NOTION_DATABASE_ID`)
 
-Name (title), Week (date range), Status (`Planned`, `In progress`, `Done`), Focus, Athlete.
+Name (title), Week (date range), Status (`Planned`, `In progress`, `Done`), Focus.
 
 Optional: a database template + `NOTION_TEMPLATE_ID`.
 
@@ -55,9 +54,9 @@ docker compose up --build
 MCP: `http://localhost:8000/mcp` with `Authorization: Bearer <MCP_AGENT_TOKEN>`.
 
 ```bash
-workout notion lifts --athlete Jacob
-workout notion recent --athlete Jacob
-workout notion publish-week --athlete Jacob --week-start 2026-09-21 --dry-run
+workout notion lifts
+workout notion recent
+workout notion publish-week --week-start 2026-09-21 --dry-run
 ```
 
 ## Agent week loop

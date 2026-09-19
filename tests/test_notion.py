@@ -11,9 +11,8 @@ def _sample_plan() -> WeeklyPlan:
     return WeeklyPlan(
         week_start=date(2026, 9, 21),
         week_end=date(2026, 9, 27),
-        title="Jacob — Week of Sep 21–27",
+        title="Week of Sep 21–27",
         focus="bench + squat",
-        athlete="Jacob",
         days=[
             PlannedDay(
                 date=date(2026, 9, 21),
@@ -45,7 +44,7 @@ def test_build_page_uses_actual_weight():
 
 def test_build_log_properties_only_writes_provided_keys():
     props = notion.build_log_properties(
-        {"date": "2026-09-21", "athlete": "Jacob", "distance": "2 miles"},
+        {"date": "2026-09-21", "distance": "2 miles"},
         notion.default_log_schema(),
     )
     assert "Distance" in props
@@ -75,7 +74,6 @@ def test_parse_lift_page_reads_actual_weight():
             "Actual weight": {"type": "rich_text", "rich_text": [{"plain_text": "195"}]},
             "Reps": {"type": "number", "number": 5},
             "Completed": {"type": "checkbox", "checkbox": True},
-            "Athlete": {"type": "rich_text", "rich_text": [{"plain_text": "Jacob"}]},
             "Week start": {"type": "date", "date": {"start": "2026-09-21"}},
         },
     }
@@ -83,7 +81,7 @@ def test_parse_lift_page_reads_actual_weight():
     assert parsed["lift"] == "bench press"
     assert parsed["actual_weight"] == "195"
     assert parsed["completed"] is True
-    assert parsed["athlete"] == "Jacob"
+    assert "athlete" not in parsed
 
 
 async def test_store_lists_and_filters_lifts(monkeypatch):
@@ -94,7 +92,6 @@ async def test_store_lists_and_filters_lifts(monkeypatch):
                 "Name": {"type": "title", "title": [{"plain_text": "bench press"}]},
                 "Date": {"type": "date", "date": {"start": "2026-09-21"}},
                 "Actual weight": {"type": "rich_text", "rich_text": [{"plain_text": "195"}]},
-                "Athlete": {"type": "rich_text", "rich_text": [{"plain_text": "Jacob"}]},
             },
         },
         {
@@ -102,7 +99,6 @@ async def test_store_lists_and_filters_lifts(monkeypatch):
             "properties": {
                 "Name": {"type": "title", "title": [{"plain_text": "squat"}]},
                 "Date": {"type": "date", "date": {"start": "2026-09-22"}},
-                "Athlete": {"type": "rich_text", "rich_text": [{"plain_text": "Other"}]},
             },
         },
     ]
@@ -125,17 +121,16 @@ async def test_store_lists_and_filters_lifts(monkeypatch):
                 "notion_lifts_database_id": "db-lifts",
                 "notion_logs_database_id": "",
                 "notion_database_id": "db-week",
-                "notion_default_athlete": "Jacob",
                 "notion_version": "",
                 "notion_timeout_seconds": 5,
             },
         )(),
     )
     monkeypatch.setattr(notion.NotionClient, "request", fake_request)
-    rows = await notion.NotionStore().list_lifts(athlete="Jacob")
-    assert [row["lift"] for row in rows] == ["bench press"]
-    recent = await notion.NotionStore().recent_performance("Jacob")
-    assert recent[0]["actual_weight"] == "195"
+    rows = await notion.NotionStore().list_lifts()
+    assert [row["lift"] for row in rows] == ["squat", "bench press"]
+    recent = await notion.NotionStore().recent_performance()
+    assert {row["lift"]: row.get("actual_weight") for row in recent}["bench press"] == "195"
 
 
 async def test_assemble_week_from_notion_rows(monkeypatch):
@@ -150,7 +145,6 @@ async def test_assemble_week_from_notion_rows(monkeypatch):
                     "actual_weight": "195",
                     "reps": 5,
                     "completed": True,
-                    "athlete": "Jacob",
                 }
             ]
 
@@ -174,7 +168,6 @@ async def test_assemble_week_from_notion_rows(monkeypatch):
 
     monkeypatch.setattr(exercisedb, "videos_for_lift_names", fake_videos)
     plan = await weekly_plan_service.assemble_weekly_plan(
-        athlete="Jacob",
         week_start=date(2026, 9, 21),
         store=FakeStore(),
     )
@@ -207,7 +200,6 @@ async def test_mcp_publish_from_notion(monkeypatch):
                     "actual_weight": None,
                     "reps": 3,
                     "completed": False,
-                    "athlete": "Jacob",
                 }
             ]
 
@@ -216,11 +208,10 @@ async def test_mcp_publish_from_notion(monkeypatch):
 
     monkeypatch.setattr(notion, "NotionStore", FakeStore)
     monkeypatch.setattr(exercisedb, "videos_for_lift_names", lambda names: {})
-    monkeypatch.setattr(notion, "_require_athlete", lambda value: value or "Jacob")
 
     result = await mcp.call_tool(
         "publish_weekly_workout_to_notion",
-        {"athlete": "Jacob", "week_start": "2026-09-21", "dry_run": True, "include_videos": False},
+        {"week_start": "2026-09-21", "dry_run": True, "include_videos": False},
     )
     payload = _tool_payload(result)
     assert payload["dry_run"] is True
@@ -238,5 +229,5 @@ def test_cli_publish_dry_run(tmp_path, capsys, monkeypatch):
     monkeypatch.setattr(weekly_plan_service, "attach_videos", fake_attach)
     assert main(["notion", "publish", "--plan", str(path), "--dry-run", "--no-videos"]) == 0
     printed = capsys.readouterr().out
-    assert "Jacob" in printed
+    assert "Week of Sep 21" in printed
     assert '"dry_run": true' in printed

@@ -39,6 +39,5 @@ class WeeklyPlan(BaseModel):
     week_end: date
     title: str
     focus: str | None = None
-    athlete: str | None = None
     notes: str | None = None
     days: list[PlannedDay] = Field(default_factory=list)

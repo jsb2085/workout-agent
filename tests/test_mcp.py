@@ -58,7 +58,6 @@ async def test_mcp_create_lift_uses_notion(monkeypatch):
     created = await mcp.call_tool(
         "create_lifting_workout",
         {
-            "athlete": "Jacob",
             "lift": "bench press",
             "goal_weight": "185",
             "reps": 5,
@@ -67,8 +66,8 @@ async def test_mcp_create_lift_uses_notion(monkeypatch):
     )
     payload = _tool_payload(created)
     assert payload["lift"] == "bench press"
-    assert payload["athlete"] == "Jacob"
     assert payload["actual_weight"] is None
+    assert "athlete" not in payload
 
 
 async def test_mcp_update_lift_actual_weight(monkeypatch):
@@ -92,8 +91,8 @@ async def test_old_rest_routes_are_gone(client):
 
 
 async def test_mcp_recent_and_search(monkeypatch):
-    async def fake_recent(self, athlete=None):
-        return [{"lift": "bench press", "actual_weight": "195", "goal_weight": "185", "athlete": athlete}]
+    async def fake_recent(self):
+        return [{"lift": "bench press", "actual_weight": "195", "goal_weight": "185"}]
 
     async def fake_search(**kwargs):
         return [exercisedb.normalize_exercise({"exerciseId": "exr_bench", "name": "Bench Press", "videoUrl": "https://cdn.example/bench.mp4"})], 1
@@ -101,7 +100,7 @@ async def test_mcp_recent_and_search(monkeypatch):
     monkeypatch.setattr(notion.NotionStore, "recent_performance", fake_recent)
     monkeypatch.setattr(exercisedb, "search_exercises", fake_search)
 
-    recent = await mcp.call_tool("get_recent_lift_performance", {"athlete": "Jacob"})
+    recent = await mcp.call_tool("get_recent_lift_performance", {})
     assert _tool_payload(recent)["lifts"][0]["actual_weight"] == "195"
 
     searched = await mcp.call_tool("search_exercise_videos", {"name": "bench press"})

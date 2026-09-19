@@ -20,12 +20,11 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool
     async def list_lifting_workouts(
-        athlete: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
     ) -> list[dict[str, Any]]:
         """List lift rows from the Notion Workout Lifts database (source of truth)."""
-        return await store().list_lifts(athlete=athlete, date_from=_day(date_from), date_to=_day(date_to))
+        return await store().list_lifts(date_from=_day(date_from), date_to=_day(date_to))
 
     @mcp.tool
     async def get_lifting_workout(item_id: str) -> dict[str, Any]:
@@ -38,7 +37,6 @@ def register_tools(mcp: FastMCP) -> None:
         goal_weight: str,
         reps: int,
         date_todo: str,
-        athlete: str | None = None,
         actual_weight: str | None = None,
         completed: bool = False,
         week_start: str | None = None,
@@ -54,7 +52,6 @@ def register_tools(mcp: FastMCP) -> None:
                 "goal_weight": goal_weight,
                 "reps": reps,
                 "date": day,
-                "athlete": athlete,
                 "actual_weight": actual_weight,
                 "completed": completed,
                 "week_start": start,
@@ -70,9 +67,8 @@ def register_tools(mcp: FastMCP) -> None:
         date_todo: str | None = None,
         actual_weight: str | None = None,
         completed: bool | None = None,
-        athlete: str | None = None,
     ) -> dict[str, Any]:
-        """Update a Notion lift row. Use this after logging Actual weight, or the user can edit Notion directly."""
+        """Update a Notion lift row. Use this after logging Actual weight, or edit Notion directly."""
         data: dict[str, Any] = {}
         if lift is not None:
             data["lift"] = lift
@@ -86,8 +82,6 @@ def register_tools(mcp: FastMCP) -> None:
             data["actual_weight"] = actual_weight
         if completed is not None:
             data["completed"] = completed
-        if athlete is not None:
-            data["athlete"] = athlete
         return await store().update_lift(item_id, data)
 
     @mcp.tool
@@ -95,17 +89,16 @@ def register_tools(mcp: FastMCP) -> None:
         """Archive a Notion lift row."""
         return await store().delete_lift(item_id)
 
-    async def _upsert_log(athlete: str | None, date_todo: str, **fields: Any) -> dict[str, Any]:
-        return await store().upsert_log({"athlete": athlete, "date": _day(date_todo), **fields})
+    async def _upsert_log(date_todo: str, **fields: Any) -> dict[str, Any]:
+        return await store().upsert_log({"date": _day(date_todo), **fields})
 
     @mcp.tool
     async def list_cardio(
-        athlete: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
     ) -> list[dict[str, Any]]:
         """List daily Notion logs that include cardio."""
-        rows = await store().list_logs(athlete=athlete, date_from=_day(date_from), date_to=_day(date_to))
+        rows = await store().list_logs(date_from=_day(date_from), date_to=_day(date_to))
         return [row for row in rows if row.get("cardio_kind") or row.get("distance")]
 
     @mcp.tool
@@ -117,11 +110,9 @@ def register_tools(mcp: FastMCP) -> None:
         run: bool = False,
         walk: bool = False,
         completed: bool = False,
-        athlete: str | None = None,
     ) -> dict[str, Any]:
         """Write cardio onto that day's Notion Daily Log row."""
         return await _upsert_log(
-            athlete,
             date_todo,
             distance=distance,
             cardio_reps=reps,
@@ -145,7 +136,6 @@ def register_tools(mcp: FastMCP) -> None:
         current = await store().get_log(item_id)
         data = {
             "date": current.get("date"),
-            "athlete": current.get("athlete"),
             "distance": distance if distance is not None else current.get("distance"),
             "cardio_reps": reps if reps is not None else current.get("cardio_reps"),
             "sprint": sprint if sprint is not None else current.get("sprint"),
@@ -179,12 +169,11 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool
     async def list_protein(
-        athlete: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
     ) -> list[dict[str, Any]]:
         """List daily Notion logs that include protein."""
-        rows = await store().list_logs(athlete=athlete, date_from=_day(date_from), date_to=_day(date_to))
+        rows = await store().list_logs(date_from=_day(date_from), date_to=_day(date_to))
         return [row for row in rows if row.get("protein_goal") is not None or row.get("protein_actual") is not None]
 
     @mcp.tool
@@ -192,10 +181,9 @@ def register_tools(mcp: FastMCP) -> None:
         grams_goal: int,
         grams_actual: int,
         date_todo: str,
-        athlete: str | None = None,
     ) -> dict[str, Any]:
         """Write protein onto that day's Notion Daily Log row."""
-        return await _upsert_log(athlete, date_todo, protein_goal=grams_goal, protein_actual=grams_actual)
+        return await _upsert_log(date_todo, protein_goal=grams_goal, protein_actual=grams_actual)
 
     @mcp.tool
     async def update_protein(
@@ -221,12 +209,11 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool
     async def list_steps(
-        athlete: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
     ) -> list[dict[str, Any]]:
         """List daily Notion logs that include steps."""
-        rows = await store().list_logs(athlete=athlete, date_from=_day(date_from), date_to=_day(date_to))
+        rows = await store().list_logs(date_from=_day(date_from), date_to=_day(date_to))
         return [row for row in rows if row.get("steps_goal") is not None or row.get("steps_actual") is not None]
 
     @mcp.tool
@@ -234,10 +221,9 @@ def register_tools(mcp: FastMCP) -> None:
         steps_goal: int,
         steps_actual: int,
         date_todo: str,
-        athlete: str | None = None,
     ) -> dict[str, Any]:
         """Write steps onto that day's Notion Daily Log row."""
-        return await _upsert_log(athlete, date_todo, steps_goal=steps_goal, steps_actual=steps_actual)
+        return await _upsert_log(date_todo, steps_goal=steps_goal, steps_actual=steps_actual)
 
     @mcp.tool
     async def update_steps(
@@ -262,9 +248,9 @@ def register_tools(mcp: FastMCP) -> None:
         return await store().upsert_log(current)
 
     @mcp.tool
-    async def get_recent_lift_performance(athlete: str | None = None) -> dict[str, Any]:
+    async def get_recent_lift_performance() -> dict[str, Any]:
         """Latest lift rows from Notion, one per lift name. Use Actual weight for next week's goals."""
-        return {"lifts": await store().recent_performance(athlete)}
+        return {"lifts": await store().recent_performance()}
 
     @mcp.tool
     async def search_exercise_videos(
@@ -299,7 +285,6 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool
     async def publish_weekly_workout_to_notion(
-        athlete: str | None = None,
         week_start: str | None = None,
         week_end: str | None = None,
         title: str | None = None,
@@ -319,11 +304,9 @@ def register_tools(mcp: FastMCP) -> None:
             if include_videos:
                 plan = await weekly_plan_service.attach_videos(plan)
         else:
-            who = notion._require_athlete(athlete)
             start = weekly_plan_service.parse_week_start(week_start)
             end = weekly_plan_service.week_end_for(start, week_end)
             plan = await weekly_plan_service.assemble_weekly_plan(
-                athlete=who,
                 week_start=start,
                 week_end=end,
                 focus=focus,

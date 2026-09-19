@@ -16,7 +16,6 @@ def _parser() -> argparse.ArgumentParser:
     notion_sub = notion_parser.add_subparsers(dest="command", required=True)
 
     publish_week = notion_sub.add_parser("publish-week", help="Build this week's page from Notion lift rows")
-    publish_week.add_argument("--athlete")
     publish_week.add_argument("--week-start")
     publish_week.add_argument("--week-end")
     publish_week.add_argument("--focus")
@@ -30,22 +29,18 @@ def _parser() -> argparse.ArgumentParser:
     publish.add_argument("--dry-run", action="store_true")
     publish.add_argument("--no-videos", action="store_true")
 
-    recent = notion_sub.add_parser("recent", help="Latest actual/goal weight per lift")
-    recent.add_argument("--athlete")
+    notion_sub.add_parser("recent", help="Latest actual/goal weight per lift")
 
     lifts = notion_sub.add_parser("lifts", help="List Notion lift rows")
-    lifts.add_argument("--athlete")
     lifts.add_argument("--date-from")
     lifts.add_argument("--date-to")
     return parser
 
 
 async def _publish_week(args: argparse.Namespace) -> dict[str, Any]:
-    who = notion._require_athlete(args.athlete)
     start = weekly_plan_service.parse_week_start(args.week_start)
     end = weekly_plan_service.week_end_for(start, args.week_end)
     plan = await weekly_plan_service.assemble_weekly_plan(
-        athlete=who,
         week_start=start,
         week_end=end,
         focus=args.focus,
@@ -63,14 +58,13 @@ async def _publish_plan(args: argparse.Namespace) -> dict[str, Any]:
     return await notion.publish_weekly_plan(plan, dry_run=args.dry_run)
 
 
-async def _recent(args: argparse.Namespace) -> dict[str, Any]:
-    return {"lifts": await notion.NotionStore().recent_performance(args.athlete)}
+async def _recent(_args: argparse.Namespace) -> dict[str, Any]:
+    return {"lifts": await notion.NotionStore().recent_performance()}
 
 
 async def _lifts(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "lifts": await notion.NotionStore().list_lifts(
-            athlete=args.athlete,
             date_from=args.date_from,
             date_to=args.date_to,
         )
