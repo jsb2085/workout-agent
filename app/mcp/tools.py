@@ -609,3 +609,46 @@ def register_tools(mcp: FastMCP) -> None:
         if notes:
             plan.notes = notes
         return await notion.publish_weekly_plan(plan, dry_run=dry_run)
+
+    @mcp.tool
+    async def sync_notion_workouts_to_agent(
+        email: str | None = None,
+        user_id: str | None = None,
+        week_start: str | None = None,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        """Pull Actual weight and completed flags from the Notion Workout Lifts table.
+
+        Call this after the user logs weights in Notion, before planning next week.
+        Matches rows by Workout id, then by lift name + date. Updates lifting_workouts
+        in Postgres so get_recent_lift_performance sees the real numbers.
+        """
+        async with db_module.SessionLocal() as session:
+            user = await records.resolve_user(session, email=email, user_id=user_id)
+            return await notion.sync_lifts_from_notion(
+                session,
+                user,
+                week_start=week_start,
+                dry_run=dry_run,
+            )
+
+    @mcp.tool
+    async def get_recent_lift_performance(
+        email: str | None = None,
+        user_id: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> dict[str, Any]:
+        """Latest actual_weight per lift for this user. Use this to set next week's goals.
+
+        Run sync_notion_workouts_to_agent first so Notion-entered weights are included.
+        """
+        async with db_module.SessionLocal() as session:
+            user = await records.resolve_user(session, email=email, user_id=user_id)
+            rows = await weekly_plan_service.recent_lift_performance(
+                session,
+                user,
+                date_from=_parse_dt(date_from) if date_from else None,
+                date_to=_parse_dt(date_to) if date_to else None,
+            )
+        return {"lifts": rows}

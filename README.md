@@ -113,8 +113,22 @@ The agent writes the week it just planned into a Notion database you can check o
 | Focus | Text | e.g. hypertrophy / bench |
 | Athlete | Text | You or your wife |
 
-4. Optional: add a database template called **Weekly workout** with your own header/notes, then put its page id in `NOTION_TEMPLATE_ID`. The agent applies that template, then appends this week's checkable lifts and ExerciseDB demos.
-5. Share the database with the integration. Copy the database id from the URL into `NOTION_DATABASE_ID`.
+4. Create a second database named **Workout Lifts** (this is how weights come back to the agent):
+
+| Property | Type | Who fills it |
+|---|---|---|
+| Name | Title | Agent (lift name) |
+| Date | Date | Agent |
+| Goal weight | Text | Agent |
+| **Actual weight** | Text | **You, after the set** |
+| Reps | Number | Agent |
+| Completed | Checkbox | You or the agent |
+| Workout id | Text | Agent (do not edit) |
+| Athlete | Text | Agent |
+| Week start | Date | Agent |
+
+5. Optional: add a Weekly Workouts template called **Weekly workout**, then put its page id in `NOTION_TEMPLATE_ID`.
+6. Share **both** databases with the integration. Put the ids in `NOTION_DATABASE_ID` and `NOTION_LIFTS_DATABASE_ID`.
 
 Suggested Notion views: a calendar on `Week`, and a board grouped by `Status`.
 
@@ -138,6 +152,24 @@ workout notion publish-week --email you@example.com --dry-run
 
 Or MCP `publish_weekly_workout_to_notion` with the same fields (`dry_run=true` to preview). Pass `plan_json` if the agent authored a `WeeklyPlan` instead of reading saved rows.
 
+### Sync weights back before next week
+
+Enter the weight you actually hit in **Workout Lifts → Actual weight** (not by editing the weekly page text). Then:
+
+```bash
+workout notion sync --email you@example.com --week-start 2026-09-21
+workout notion recent --email you@example.com
+```
+
+The agent loop is:
+
+1. `sync_notion_workouts_to_agent` — copies Actual weight / completed into `lifting_workouts`
+2. `get_recent_lift_performance` — latest actual per lift
+3. Plan next week from those numbers (`create_lifting_workout` with a new `goal_weight`)
+4. `publish_weekly_workout_to_notion` — new week page + new lift rows
+
+Matching uses `Workout id` first, then lift name + date. Re-publishing the same week updates goal/date/reps but does **not** overwrite a weight you already logged.
+
 ## MCP server
 
 Same process as the API, streamable HTTP at `/mcp`.
@@ -150,7 +182,7 @@ Authorization: Bearer <MCP_AGENT_TOKEN>
 
 Every tool takes `email` and/or `user_id` so one agent can act for either of you.
 
-**Read tools:** `resolve_user`, plus `list_*` / `get_*` for lifting workouts, cardio, gym locations, performance goals, physique photos, protein, steps, and body stats. Physique photos also expose `get_physic_photo_url` and `get_physique_comparison_photos` (latest vs goal, with download URLs). ExerciseDB tools: `search_exercise_videos`, `get_exercise_video`, and `get_workout_exercise_videos` (matches each saved lift to a demo MP4 or GIF). After planning a week, `publish_weekly_workout_to_notion` writes that week into the Notion template.
+**Read tools:** `resolve_user`, plus `list_*` / `get_*` for lifting workouts, cardio, gym locations, performance goals, physique photos, protein, steps, and body stats. Physique photos also expose `get_physic_photo_url` and `get_physique_comparison_photos` (latest vs goal, with download URLs). ExerciseDB tools: `search_exercise_videos`, `get_exercise_video`, and `get_workout_exercise_videos` (matches each saved lift to a demo MP4 or GIF). After planning a week, `publish_weekly_workout_to_notion` writes that week into the Notion template. Before the next week, `sync_notion_workouts_to_agent` pulls Actual weight back, and `get_recent_lift_performance` is what the planner should read.
 
 **Write tools (create / update / delete only):** lifting workouts, cardio, protein, steps.
 

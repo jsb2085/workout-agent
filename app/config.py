@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     notion_database_id: str = ""
     notion_data_source_id: str = ""
     notion_template_id: str = ""
+    notion_lifts_database_id: str = ""
     notion_version: str = ""
     notion_timeout_seconds: float = 20.0
 

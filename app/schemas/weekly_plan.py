@@ -14,6 +14,7 @@ class PlannedLift(BaseModel):
     demo_url: str | None = None
     media_kind: str | None = None
     exercise_name: str | None = None
+    workout_id: str | None = None
 
 
 class PlannedCardio(BaseModel):

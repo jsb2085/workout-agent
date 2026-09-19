@@ -131,6 +131,7 @@ async def test_publish_creates_page_with_children(monkeypatch):
                 "notion_database_id": "db-weekly",
                 "notion_data_source_id": "",
                 "notion_template_id": "",
+                "notion_lifts_database_id": "",
                 "notion_version": "",
                 "notion_timeout_seconds": 5,
             },
@@ -177,6 +178,7 @@ async def test_assemble_week_from_saved_workouts(client, alice_token, monkeypatc
         )
     monday = next(day for day in plan.days if day.date == date(2026, 9, 21))
     assert monday.lifts[0].lift == "bench press"
+    assert monday.lifts[0].workout_id
     assert monday.lifts[0].demo_url.endswith("bench.mp4")
     assert monday.cardio[0].kind == "walk"
     assert len(plan.days) == 7
@@ -223,3 +225,117 @@ def test_cli_publish_plan_dry_run(tmp_path, capsys, monkeypatch):
     assert "Jacob" in printed
     assert "Week of Sep 21" in printed
     assert '"dry_run": true' in printed
+    assert "lift_rows" in printed
+
+
+def test_lift_row_round_trip_keeps_workout_id():
+    plan = _sample_plan()
+    lift = plan.days[0].lifts[0]
+    lift.workout_id = "11111111-1111-1111-1111-111111111111"
+    props = notion.build_lift_properties(lift, "2026-09-21", plan)
+    page = {"id": "notion-lift-1", "properties": props}
+    schema = {
+        "properties": {
+            "Name": {"type": "title"},
+            "Date": {"type": "date"},
+            "Goal weight": {"type": "rich_text"},
+            "Actual weight": {"type": "rich_text"},
+            "Reps": {"type": "number"},
+            "Completed": {"type": "checkbox"},
+            "Workout id": {"type": "rich_text"},
+            "Athlete": {"type": "rich_text"},
+            "Week start": {"type": "date"},
+        }
+    }
+    # Simulate Notion returning typed properties the way the API stores them
+    page["properties"]["Actual weight"] = {
+        "type": "rich_text",
+        "rich_text": [{"plain_text": "195", "text": {"content": "195"}}],
+    }
+    page["properties"]["Completed"] = {"type": "checkbox", "checkbox": True}
+    page["properties"]["Workout id"] = {
+        "type": "rich_text",
+        "rich_text": [{"plain_text": lift.workout_id, "text": {"content": lift.workout_id}}],
+    }
+    page["properties"]["Name"] = {
+        "type": "title",
+        "title": [{"plain_text": "bench press", "text": {"content": "bench press"}}],
+    }
+    parsed = notion.parse_lift_page(page, schema)
+    assert parsed["workout_id"] == lift.workout_id
+    assert parsed["actual_weight"] == "195"
+    assert parsed["completed"] is True
+    assert parsed["lift"] == "bench press"
+
+
+async def test_sync_updates_actual_weight_for_next_week(client, alice_token):
+    headers = auth_header(alice_token)
+    created = await client.post("/lifting-workouts/", headers=headers, json=WORKOUT)
+    assert created.status_code == 201
+    workout_id = created.json()["id"]
+
+    from app import db as db_module
+    from app.services import records
+
+    async with db_module.SessionLocal() as session:
+        user = await records.resolve_user(session, email="alice@example.com")
+        result = await notion.apply_notion_lift_updates(
+            session,
+            user,
+            [
+                {
+                    "workout_id": workout_id,
+                    "lift": "bench press",
+                    "date": "2026-09-21",
+                    "actual_weight": "195",
+                    "completed": True,
+                    "notion_page_id": "notion-lift-1",
+                }
+            ],
+        )
+    assert result["updated"][0]["actual_weight"] == "195"
+    assert result["updated"][0]["completed"] is True
+
+    listed = await client.get("/lifting-workouts/", headers=headers)
+    row = next(item for item in listed.json() if item["id"] == workout_id)
+    assert row["actual_weight"] == "195"
+    assert row["completed"] is True
+
+    async with db_module.SessionLocal() as session:
+        user = await records.resolve_user(session, email="alice@example.com")
+        recent = await weekly_plan_service.recent_lift_performance(session, user)
+    assert recent[0]["lift"] == "bench press"
+    assert recent[0]["actual_weight"] == "195"
+
+
+async def test_mcp_sync_and_recent_performance(client, alice_token, monkeypatch):
+    created = await client.post(
+        "/lifting-workouts/",
+        headers=auth_header(alice_token),
+        json=WORKOUT,
+    )
+    workout_id = created.json()["id"]
+
+    async def fake_fetch(**kwargs):
+        return [
+            {
+                "workout_id": workout_id,
+                "lift": "bench press",
+                "date": "2026-09-21",
+                "actual_weight": "200",
+                "completed": True,
+                "notion_page_id": "n1",
+            }
+        ]
+
+    monkeypatch.setattr(notion, "fetch_notion_lifts", fake_fetch)
+    synced = await mcp.call_tool(
+        "sync_notion_workouts_to_agent",
+        {"email": "alice@example.com", "week_start": "2026-09-21"},
+    )
+    synced_body = _tool_payload(synced)
+    assert synced_body["updated"][0]["actual_weight"] == "200"
+
+    recent = await mcp.call_tool("get_recent_lift_performance", {"email": "alice@example.com"})
+    recent_body = _tool_payload(recent)
+    assert recent_body["lifts"][0]["actual_weight"] == "200"

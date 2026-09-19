@@ -101,6 +101,7 @@ async def assemble_weekly_plan(
                 demo_url=exercise.demo_url if exercise else None,
                 media_kind=exercise.media_kind if exercise else None,
                 exercise_name=exercise.name if exercise else None,
+                workout_id=str(item.id),
             )
         )
     for item in cardios:
@@ -158,3 +159,41 @@ def parse_week_start(value: str | None, *, today: date | None = None) -> date:
     if value:
         return date.fromisoformat(value[:10])
     return monday_of(today or datetime.now(timezone.utc).date())
+
+
+async def recent_lift_performance(
+    session: AsyncSession,
+    user: User,
+    *,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+) -> list[dict[str, Any]]:
+    """Latest actual weight per lift name, for planning the next week."""
+    workouts = await records.list_for_user(
+        session,
+        LiftingWorkout,
+        user.id,
+        date_field="date_todo",
+        date_from=date_from,
+        date_to=date_to,
+    )
+    latest: dict[str, LiftingWorkout] = {}
+    for item in workouts:
+        key = item.lift.casefold()
+        if key not in latest:
+            latest[key] = item
+    rows = []
+    for item in latest.values():
+        rows.append(
+            {
+                "lift": item.lift,
+                "actual_weight": item.actual_weight,
+                "goal_weight": item.goal_weight,
+                "reps": item.reps,
+                "completed": item.completed,
+                "date": item.date_todo.date().isoformat(),
+                "workout_id": str(item.id),
+            }
+        )
+    rows.sort(key=lambda row: row["date"], reverse=True)
+    return rows
