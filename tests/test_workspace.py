@@ -181,3 +181,21 @@ def test_upsert_env(tmp_path):
     assert "OPENAI_API_KEY=sk-test" in text
     assert "NOTION_GOALS_DATABASE_ID=goals-1" in text
     assert text.count("NOTION_TOKEN=secret") == 1
+
+
+def test_repo_root_workout_script():
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [sys.executable, str(root / "workout"), "--help"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "setup" in result.stdout
+    assert "run" in result.stdout

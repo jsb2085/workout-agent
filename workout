@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+"""Run the workout CLI from a git checkout.
+
+`workout` is not on PATH until the package is installed. From the repo root:
+
+    python3 workout setup --help
+    python3 -m app setup --help
+"""
+
+from app.cli import main
+
+if __name__ == "__main__":
+    raise SystemExit(main())
