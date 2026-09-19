@@ -22,6 +22,7 @@ def test_parse_page_id_from_url_and_uuid():
     assert parse_page_id(uuid) == uuid
     assert parse_page_id(uuid.replace("-", "")) == uuid
     assert parse_page_id(f"https://www.notion.so/Workout-Agent-{uuid.replace('-', '')}") == uuid
+    assert parse_page_id(f"https://app.notion.com/p/Workout-Agent-{uuid.replace('-', '')}") == uuid
     try:
         parse_page_id("not-an-id")
     except NotionError:
@@ -199,3 +200,45 @@ def test_repo_root_workout_script():
     assert result.returncode == 0
     assert "setup" in result.stdout
     assert "run" in result.stdout
+
+
+async def test_setup_share_error_lists_visible_pages():
+    class FakeClient:
+        async def retrieve_page(self, page_id):
+            raise NotionError(
+                'Could not find page with ID: 264b5d28-04f5-81a3-b8d4-c9f6e1a2b3c4. Make sure the relevant pages and databases are shared with your integration "Workout Agent".',
+                404,
+            )
+
+        async def search_pages(self, **kwargs):
+            return [
+                {
+                    "id": "visible",
+                    "url": "https://www.notion.so/visible",
+                    "properties": {
+                        "title": {"type": "title", "title": [{"plain_text": "Gym notes"}]}
+                    },
+                }
+            ]
+
+    try:
+        await setup_workspace("264b5d28-04f5-81a3-b8d4-c9f6e1a2b3c4", client=FakeClient())
+    except NotionError as exc:
+        text = str(exc)
+        assert "Share" in text
+        assert "Gym notes" in text
+        assert "Can edit" in text
+    else:
+        raise AssertionError("expected NotionError")
+
+
+def test_cli_setup_share_error_has_no_traceback(capsys, monkeypatch):
+    async def fail(*args, **kwargs):
+        raise NotionError("Could not find page with ID: abc. Shared with your integration.", 404)
+
+    monkeypatch.setattr("app.cli.setup_workspace", fail)
+    assert main(["setup", "--parent", "264b5d28-04f5-81a3-b8d4-c9f6e1a2b3c4"]) == 1
+    captured = capsys.readouterr()
+    assert "Could not find page" in captured.err
+    assert "Traceback" not in captured.err
+    assert captured.out == ""

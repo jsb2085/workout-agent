@@ -164,7 +164,7 @@ def test_cli_run_dry(monkeypatch, capsys):
         assert kwargs["week_start"] == "2026-09-21"
         return {"plan": {"title": "Week of Sep 21–27"}, "push": {"dry_run": True}}
 
-    monkeypatch.setattr("app.cli.run_week", fake_run_week)
+    monkeypatch.setattr("app.graph.planner.run_week", fake_run_week)
     assert main(["run", "--week-start", "2026-09-21", "--dry-run", "--no-videos"]) == 0
     printed = capsys.readouterr().out
     assert "Week of Sep 21" in printed
